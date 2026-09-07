@@ -11,10 +11,39 @@ boundary, but nothing here depends on the other projects.
 
 ## Status
 
-_M1 merged to `main`. M2 (`m2-eda`) and M3 (`m3-model`) are open PRs — the M1/M2
-detail below predates those merges; treat the milestone table as current._
+_M1–M3 merged to `main`. M4 (`m4-agent`) is an open PR. Some prose below predates
+the merges; the milestone table is current._
 
-**M3 — baseline model, complete** (branch `m3-model`, PR open).
+**M4 — agent loop, complete** (branch `m4-agent`, PR open).
+
+- ✅ `agent/catalog.py` — reads `catalog/<key>.yaml`; `summary_text()` for the
+  system prompt.
+- ✅ `agent/tools.py` — `list_datasets`, `describe_schema` (catalog + live
+  `PRAGMA table_info` + row counts), `run_sql`. **`run_sql` guardrails:**
+  `sqlparse` — one statement, must start SELECT/WITH, no DDL / non-SELECT DML /
+  PRAGMA / ATTACH; wrap in `SELECT * FROM (...) LIMIT n+1` (honest `truncated`);
+  per-connection statement timeout via SQLite progress handler; runs on
+  `ro_engine()`; **errors returned structured** (`{error_type, message}`) for the
+  self-correction loop.
+- ✅ `agent/prompts.py` — one stable system block (role + catalog schema summary
+  + rules) with a `cache_control` breakpoint.
+- ✅ `agent/trace.py` — per-run `Trace`: turns, tokens, cost (per-model rate
+  table), latency → one JSON line to `logs/runs.jsonl`; `.summary()` one-liner.
+- ✅ `agent/loop.py` — hand loop. `MAX_AGENT_ITERS` cap; execute *all* `tool_use`
+  blocks, return *all* results in one user message; adaptive thinking gated to
+  Opus/Sonnet/Fable (Haiku dev path sends none); specific exception chain
+  (`NotFoundError`→`RateLimitError`→`APIStatusError`→`APIConnectionError`), one
+  rate-limit retry. `python -m agent.loop "question"` prints answer + SQL + trace.
+- **Live-verified** on `claude-haiku-4-5`: 4 questions, all correct vs. the M1/M2
+  numbers, **$0.06 total**. The `MEDIAN()` question self-corrected (SQLite has no
+  MEDIAN) across 3 retries to a window-function query. Simple Qs ≈ 2 turns /
+  $0.007; hard Q ≈ 6 turns / $0.04.
+- ⚠️ **Prompt caching not engaging** — the ~1.5k-token `tools`+`system` prefix is
+  under the cache minimum. Fix at M6: fold the full `describe_schema` output into
+  the system prompt (bigger prefix → cacheable, and fewer tool round-trips).
+- 46 tests green (16 new; loop tested with a fake client, no API).
+
+**M3 — baseline model, complete** (merged).
 
 - ✅ `model/seattle_energy/features.py` — pure `build_features(raw)` → model
   frame; `temporal_split` (train ≤2022 / valid 2023 / test 2024) **and**
@@ -132,7 +161,7 @@ MySQL design — §8.8 anticipated the swap.)*
 | **M1** | Source spec + ingest | ✅ `teqw-tu6e` verified; `sources/seattle_energy.py` + catalog; `db/migrate.py` + `ingest/run.py`; 38,309 rows loaded to SQLite, counts match portal; `ingestion_runs` populated |
 | **M2** | EDA notebook | ✅ `notebooks/01_eda.ipynb` — target balance, missingness, outlier rule, weak-signal finding, leakage check (`m2-eda`) |
 | **M3** | Baseline model | ✅ `features.py` + `train.py`; HGB + LogReg baseline; temporal **and** building-disjoint splits; metrics/importance artifacts; `model_card.md` (`m3-model`) |
-| M4 | Agent loop | `describe_schema` + `run_sql` (guardrails, `ro_engine`); hand loop with `MAX_ITERS`; `trace.py` → `runs.jsonl` |
+| **M4** | Agent loop | ✅ `agent/` — `list_datasets`/`describe_schema`/`run_sql` (guardrails, `ro_engine`); hand loop with `MAX_ITERS`; `trace.py` → `runs.jsonl`; live-verified on Haiku, self-correcting SQL |
 | M5 | `predict` + `make_chart` | both tools registered; agent picks the right one per question |
 | M6 | Interface + evals | `cli.py`, `POST /ask`; `evals/questions.yaml` (12-15) + `run.py` reporting pass rate / iterations / cost |
 | M7 | Containerize + deploy | `deploy/Dockerfile` (Flask + agent + SQLite `mode=ro`); Cloud Run; `/ask` + `/health`; `claude-haiku-4-5`; charts inline |

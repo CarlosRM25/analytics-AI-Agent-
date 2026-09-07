@@ -17,13 +17,15 @@ from typing import Literal
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Local dev also covers ingestion, EDA, and model work — only DB access is
+# universally needed; the agent checks for ANTHROPIC_API_KEY itself when it runs
+# (M4). The deployed service exists to serve the agent, so its needs are required.
 _REQUIRED: dict[str, tuple[str, ...]] = {
     "local": (
         "DB_ETL_USER",
         "DB_ETL_PASSWORD",
         "DB_AGENT_USER",
         "DB_AGENT_PASSWORD",
-        "ANTHROPIC_API_KEY",
     ),
     "deployed": (
         "ANTHROPIC_API_KEY",

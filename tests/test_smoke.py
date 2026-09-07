@@ -11,12 +11,11 @@ from pydantic import ValidationError
 import config
 from sources.base import REGISTRY, FieldMap, SourceSpec, get, register
 
-_LOCAL_SECRETS = (
+_LOCAL_REQUIRED = (
     "DB_ETL_USER",
     "DB_ETL_PASSWORD",
     "DB_AGENT_USER",
     "DB_AGENT_PASSWORD",
-    "ANTHROPIC_API_KEY",
 )
 
 
@@ -24,11 +23,24 @@ def test_config_module_exposes_factory():
     assert callable(config.get_settings)
 
 
-def test_local_mode_requires_secrets(monkeypatch):
-    for var in _LOCAL_SECRETS:
+def test_local_mode_requires_db_creds(monkeypatch):
+    for var in _LOCAL_REQUIRED:
         monkeypatch.delenv(var, raising=False)
     with pytest.raises(ValidationError):
         config.Settings(DEPLOY_MODE="local", _env_file=None)
+
+
+def test_local_mode_does_not_require_api_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    settings = config.Settings(
+        DEPLOY_MODE="local",
+        DB_ETL_USER="e",
+        DB_ETL_PASSWORD="e",
+        DB_AGENT_USER="a",
+        DB_AGENT_PASSWORD="a",
+        _env_file=None,
+    )
+    assert settings.ANTHROPIC_API_KEY is None
 
 
 def test_deployed_mode_ok_with_minimum(monkeypatch):

@@ -1,11 +1,11 @@
 # analytics-agent dependencies (architecture doc appendix).
-# Unpinned for the M0 scaffold; versions get locked once the agent loop lands (M4).
+# Unpinned for the M0/M1 scaffold; versions get locked once the agent loop lands (M4).
 
 # --- ingestion + storage ---
 requests
-SQLAlchemy
-PyMySQL
-sqlparse
+SQLAlchemy          # Core, over stdlib sqlite3
+PyYAML              # catalog/*.yaml — column docs read by ingest + describe_schema
+sqlparse            # run_sql guardrails (M4)
 
 # --- modeling ---
 pandas

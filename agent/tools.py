@@ -4,8 +4,8 @@ Five tools, all defined with ``strict: true`` / ``additionalProperties: false`` 
 explicit ``required``:
 
   list_datasets   rows from ``datasets`` + one-line descriptions
-  describe_schema information_schema + the catalog YAML (never the raw DB)
-  run_sql         read-only user; single SELECT/WITH, auto-LIMIT, statement timeout
+  describe_schema SQLite introspection (PRAGMA table_info) + the catalog YAML
+  run_sql         ro_engine (PRAGMA query_only); single SELECT/WITH, auto-LIMIT, timeout
   predict         only registered when the active source has a model_module
   make_chart      constrained spec -> Plotly figure -> outputs/charts/<run_id>-<n>.html
 """

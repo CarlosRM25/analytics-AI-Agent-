@@ -1,9 +1,10 @@
 # Human-readable column docs for the Seattle energy source.
 #
-# describe_schema (M4) serves this joined to information_schema, so the agent
-# sees curated meanings, enum values, and known-null caveats — never the raw
-# database. Names below are OUR schema names (post field_map); descriptions are
-# adapted from the data.seattle.gov metadata for resource teqw-tu6e.
+# describe_schema (M4) serves this joined to SQLite introspection (PRAGMA
+# table_info / sqlite_master), so the agent sees curated meanings, enum values,
+# and known-null caveats — never the raw database. Names below are OUR schema
+# names (post field_map); descriptions are adapted from the data.seattle.gov
+# metadata for resource teqw-tu6e.
 
 dataset:
   key: seattle_energy
@@ -14,7 +15,8 @@ dataset:
     per calendar year. ~38k rows, ~3,900 buildings, data years 2015-2025.
   source_url: https://data.seattle.gov/resource/teqw-tu6e
   dialect_note: >
-    MySQL 8 locally, read-only SQLite in the deployed demo. Keep SQL ANSI-ish.
+    SQLite everywhere (local and the deployed demo). Standard SQL; SQLite has
+    window functions and CTEs. The agent connects read-only (PRAGMA query_only).
 
 tables:
 

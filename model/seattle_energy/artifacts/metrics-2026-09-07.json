@@ -1,0 +1,201 @@
+{
+  "date": "2026-09-07",
+  "features": [
+    "building_age",
+    "log_gfa_total",
+    "parking_share",
+    "number_of_floors",
+    "energy_star_score",
+    "has_energy_star",
+    "primary_property_type",
+    "council_district"
+  ],
+  "temporal": {
+    "split": "train<=2022, valid 2023, test 2024",
+    "test_seen_pct": 0.9575,
+    "logreg_baseline": {
+      "valid": {
+        "n": 3565,
+        "positive_rate": 0.4937,
+        "roc_auc": 0.6391,
+        "pr_auc": 0.6201,
+        "accuracy": 0.6011,
+        "confusion": {
+          "tn": 1187,
+          "fp": 618,
+          "fn": 804,
+          "tp": 956
+        }
+      },
+      "test": {
+        "n": 3529,
+        "positive_rate": 0.4948,
+        "roc_auc": 0.6438,
+        "pr_auc": 0.6328,
+        "accuracy": 0.6107,
+        "confusion": {
+          "tn": 1191,
+          "fp": 592,
+          "fn": 782,
+          "tp": 964
+        }
+      },
+      "test_seen_buildings": {
+        "n": 3379,
+        "positive_rate": 0.4895,
+        "roc_auc": 0.6472,
+        "pr_auc": 0.6285,
+        "accuracy": 0.6138,
+        "confusion": {
+          "tn": 1148,
+          "fp": 577,
+          "fn": 728,
+          "tp": 926
+        }
+      },
+      "test_new_buildings": {
+        "n": 150,
+        "positive_rate": 0.6133,
+        "roc_auc": 0.5877,
+        "pr_auc": 0.7379,
+        "accuracy": 0.54,
+        "confusion": {
+          "tn": 43,
+          "fp": 15,
+          "fn": 54,
+          "tp": 38
+        }
+      }
+    },
+    "hgb": {
+      "valid": {
+        "n": 3565,
+        "positive_rate": 0.4937,
+        "roc_auc": 0.869,
+        "pr_auc": 0.8512,
+        "accuracy": 0.7935,
+        "confusion": {
+          "tn": 1417,
+          "fp": 388,
+          "fn": 348,
+          "tp": 1412
+        }
+      },
+      "test": {
+        "n": 3529,
+        "positive_rate": 0.4948,
+        "roc_auc": 0.8565,
+        "pr_auc": 0.8371,
+        "accuracy": 0.7778,
+        "confusion": {
+          "tn": 1367,
+          "fp": 416,
+          "fn": 368,
+          "tp": 1378
+        }
+      },
+      "test_seen_buildings": {
+        "n": 3379,
+        "positive_rate": 0.4895,
+        "roc_auc": 0.864,
+        "pr_auc": 0.849,
+        "accuracy": 0.7843,
+        "confusion": {
+          "tn": 1346,
+          "fp": 379,
+          "fn": 350,
+          "tp": 1304
+        }
+      },
+      "test_new_buildings": {
+        "n": 150,
+        "positive_rate": 0.6133,
+        "roc_auc": 0.6492,
+        "pr_auc": 0.717,
+        "accuracy": 0.6333,
+        "confusion": {
+          "tn": 21,
+          "fp": 37,
+          "fn": 18,
+          "tp": 74
+        }
+      }
+    }
+  },
+  "building_disjoint": {
+    "split": "GroupShuffleSplit on ose_building_id, 25% test, seed 0",
+    "logreg_baseline": {
+      "test": {
+        "n": 9086,
+        "positive_rate": 0.4783,
+        "roc_auc": 0.6357,
+        "pr_auc": 0.6169,
+        "accuracy": 0.6071,
+        "confusion": {
+          "tn": 3145,
+          "fp": 1595,
+          "fn": 1975,
+          "tp": 2371
+        }
+      }
+    },
+    "hgb": {
+      "test": {
+        "n": 9086,
+        "positive_rate": 0.4783,
+        "roc_auc": 0.7601,
+        "pr_auc": 0.7166,
+        "accuracy": 0.6981,
+        "confusion": {
+          "tn": 3244,
+          "fp": 1496,
+          "fn": 1247,
+          "tp": 3099
+        }
+      }
+    }
+  },
+  "permutation_importance": [
+    {
+      "feature": "building_age",
+      "importance": 0.1682992260492535,
+      "std": 0.008901564624447775
+    },
+    {
+      "feature": "primary_property_type",
+      "importance": 0.1649193509529674,
+      "std": 0.005856982674030315
+    },
+    {
+      "feature": "log_gfa_total",
+      "importance": 0.09227069131333925,
+      "std": 0.0027756418985252
+    },
+    {
+      "feature": "number_of_floors",
+      "importance": 0.06775597648402662,
+      "std": 0.0036403384656934993
+    },
+    {
+      "feature": "energy_star_score",
+      "importance": 0.04925627618355618,
+      "std": 0.001788341707993999
+    },
+    {
+      "feature": "council_district",
+      "importance": 0.04033769359208354,
+      "std": 0.0017152625820436333
+    },
+    {
+      "feature": "parking_share",
+      "importance": 0.02478773692484515,
+      "std": 0.001736352858944553
+    },
+    {
+      "feature": "has_energy_star",
+      "importance": 0.0,
+      "std": 0.0
+    }
+  ],
+  "shipped_artifact": "model-2026-09-07.joblib \u2014 HGB refit on 2015-2024, outliers dropped"
+}

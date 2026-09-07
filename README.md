@@ -12,10 +12,11 @@ Public civic data (Seattle Building Energy Benchmarking, via the Socrata SODA
 API) → config-driven ingestion → SQLite → a pandas/scikit-learn model → a
 hand-written tool-use loop on the Claude API → a thin CLI / Flask interface.
 
-> **Status: M2 — EDA complete.** M1 loads 38,309 rows / 3,871 buildings
-> (2015–2025) into SQLite (counts verified against the portal); `notebooks/01_eda.ipynb`
-> settles the M3 target, feature set, and outlier rule. `ruff` + `pytest` green
-> (22 tests). Next: M3 (baseline model). Full design:
+> **Status: M3 — baseline model complete.** M1 loads 38,309 rows into SQLite;
+> M2 (`notebooks/01_eda.ipynb`) settles the target + features; M3 trains an
+> `is_high_emitter` classifier — **temporal test ROC-AUC 0.86, building-disjoint
+> 0.76** (the temporal split is flattered by recurring buildings). `ruff` +
+> `pytest` green (30 tests). Next: M4 (agent loop). Full design:
 > `analytics-agent-architecture.md` (kept with the portfolio planning docs).
 
 ## System overview
@@ -99,7 +100,7 @@ analytics-agent/
 | **M0** | Scaffold | ✅ structure, `config.py`, tooling, one passing test |
 | **M1** | Source spec + ingest | ✅ `teqw-tu6e` verified; SourceSpec + catalog; migrate + ingest; 38,309 rows in SQLite, counts match portal |
 | **M2** | EDA notebook | ✅ `notebooks/01_eda.ipynb` — target balance, missingness, outlier rule, weak-signal finding, leakage check |
-| M3 | Baseline model | `is_high_emitter` classifier, 2022/23/24 split, `model_card.md` |
+| **M3** | Baseline model | ✅ HGB + LogReg baseline; temporal + building-disjoint splits; ROC-AUC 0.86 / 0.76; `model_card.md` + metrics artifacts |
 | M4 | Agent loop | `describe_schema` + `run_sql` + hand loop + `trace.py` |
 | M5 | `predict` + `make_chart` | agent picks the right tool per question type |
 | M6 | Interface + evals | `cli.py`, `POST /ask`, `evals/` reporting pass rate / cost |

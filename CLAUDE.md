@@ -17,12 +17,25 @@ subsets), `.env.example`, `SourceSpec` + empty `REGISTRY` in `sources/base.py`,
 README with the §3 diagram, smoke tests. `ruff check .` and `pytest` are green.
 No feature logic yet.
 
-**Next: M1** — source spec + ingestion. First real task: **confirm the Socrata
-`resource_id` and field names on data.seattle.gov** (v0.1 assumed `teqw-tu6e` —
-unverified). Then `ingest/run.py` loads energy into MySQL, `ingestion_runs`
-populated, row counts match the portal.
+**M1 in progress** (branch `m1-ingestion`) — source spec + ingestion.
 
-- **Repo:** https://github.com/CarlosRM25/analytics-AI-Agent-  (`main`)
+- ✅ **Dataset verified** against data.seattle.gov: resource id **`teqw-tu6e`**
+  ("Building Energy Benchmarking Data, 2015-Present"), ~38,309 rows, 3,871
+  buildings, `datayear` 2015–2025. All 47 columns + types captured. Deltas from
+  the v0.1 assumed schema: source fields `osebuildingid`/`datayear`/`yearbuilt`
+  are **text** upstream (cast in `field_map`); no `primary_property_type` column
+  (use `epapropertytype`); no `outlier_flag` upstream (dropped for M1, revisit in
+  M2); `steam_kbtu` = `steamuse_kbtu`; added `demolished`, `number_of_floors`,
+  `tax_parcel_id`. `db/schema.sql` reflects all of this.
+- ✅ **MySQL 8.0** already installed + running here (`MySQL80` service). Bootstrap
+  script at `db/bootstrap.sql` — **Carlos runs it once as root**, sets the two
+  user passwords, mirrors them into `.env`.
+- ⬜ Build `sources/seattle_energy.py` (`SourceSpec` + `field_map`),
+  `catalog/seattle_energy.yaml`, `db/migrate.py`, `ingest/run.py`. Then load and
+  check row counts / year range against the portal; `ingestion_runs` populated.
+- ⬜ Optional: register a free Socrata app token (lifts the anon rate limit).
+
+- **Repo:** https://github.com/CarlosRM25/analytics-AI-Agent-  (`main`; M1 on `m1-ingestion`)
 - **Architecture doc:** `analytics-agent-architecture.md` — lives with the
   portfolio planning docs (`../portfolio/Claude outputs/`), v1.1, **follow it.**
   §11 has the milestone table; §12 has the open decisions.

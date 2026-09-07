@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Runtime artifacts (keep the dirs, drop the contents)
+logs/*
+!logs/.gitkeep
+outputs/charts/*
+!outputs/charts/.gitkeep
+model/seattle_energy/artifacts/*
+!model/seattle_energy/artifacts/.gitkeep
+analytics.db
+*.joblib
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

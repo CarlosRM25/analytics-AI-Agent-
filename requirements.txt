@@ -1,0 +1,34 @@
+# analytics-agent dependencies (architecture doc appendix).
+# Unpinned for the M0 scaffold; versions get locked once the agent loop lands (M4).
+
+# --- ingestion + storage ---
+requests
+SQLAlchemy
+PyMySQL
+sqlparse
+
+# --- modeling ---
+pandas
+scikit-learn
+joblib
+
+# --- agent ---
+anthropic
+
+# --- charts ---
+plotly
+
+# --- interface ---
+click
+flask
+
+# --- config ---
+pydantic-settings
+python-dotenv
+
+# --- deploy: rate-limit + response cache ---
+redis
+
+# --- tooling ---
+ruff
+pytest

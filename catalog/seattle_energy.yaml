@@ -1,0 +1,22 @@
+# Human-readable column docs for the Seattle energy source (milestone M1).
+#
+# describe_schema serves this joined to information_schema, so the agent sees
+# curated meanings, enum values, and known-null caveats — never the raw database.
+# Keep the energy_star_score caveat here: it is only populated for property types
+# eligible for a score (architecture doc section 4.4).
+#
+# Shape (filled in at M1):
+#   dataset:
+#     key: seattle_energy
+#     title: ...
+#     description: ...
+#   tables:
+#     buildings:
+#       description: ...
+#       columns:
+#         ose_building_id: { type: int, pk: true, doc: "..." }
+#         ...
+#     energy_records:
+#       ...
+
+# TODO(M1): populate from the confirmed portal schema.

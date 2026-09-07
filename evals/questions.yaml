@@ -1,0 +1,12 @@
+# Versioned evaluation question set (milestone M6). 12-15 items.
+#
+# Each item:
+#   - id: q01
+#     question: "Which property types have the worst emissions intensity?"
+#     expects:
+#       tables_touched: [energy_records, buildings]   # optional
+#       answer_contains: ["office"]                    # optional
+#       numeric: { value: 12.3, tol: 0.5 }            # optional
+#     notes: "..."
+
+# TODO(M6): write 12-15 questions spanning descriptive, predictive, and "show me".

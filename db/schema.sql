@@ -1,0 +1,16 @@
+-- analytics-agent storage schema (architecture doc section 4.3).
+-- Engine: MySQL 8 locally; SQLite (baked, read-only) in the deployed demo.
+--
+-- Tables (defined at milestone M1):
+--   datasets         one row per loaded dataset (list_datasets / describe_schema)
+--   buildings        one row per building (PK ose_building_id)
+--   energy_records   one row per building per year; UNIQUE (ose_building_id, data_year)
+--   ingestion_runs   ingest audit log
+--
+-- Two users, least privilege:
+--   benchmark_etl    ALL PRIVILEGES on benchmark.*  -- ingest + migrations only
+--   benchmark_agent  SELECT on benchmark.* only     -- the agent's run_sql tool
+--
+-- Migrations: numbered files in db/migrations/, applied in order by db/migrate.py.
+
+-- TODO(M1): CREATE TABLE statements for the four tables above.

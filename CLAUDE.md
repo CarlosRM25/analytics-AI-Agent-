@@ -11,8 +11,29 @@ boundary, but nothing here depends on the other projects.
 
 ## Status
 
-**M0 — scaffold shipped** (`main`). Repo structure per §6, `config.py`,
-`.env.example`, `SourceSpec` + `REGISTRY`, README, smoke tests.
+_M1 merged to `main`. M2 (`m2-eda`) and M3 (`m3-model`) are open PRs — the M1/M2
+detail below predates those merges; treat the milestone table as current._
+
+**M3 — baseline model, complete** (branch `m3-model`, PR open).
+
+- ✅ `model/seattle_energy/features.py` — pure `build_features(raw)` → model
+  frame; `temporal_split` (train ≤2022 / valid 2023 / test 2024) **and**
+  `building_disjoint_split` (GroupShuffleSplit on `ose_building_id`). Target +
+  `is_outlier` (Tukey 3×IQR, computed here, **not** a DB column) + the M2 feature
+  list with hygiene rules.
+- ✅ `model/seattle_energy/train.py` — HGB (native NaN + categoricals) + LogReg
+  baseline. Writes `artifacts/metrics-*.json`, `permutation-importance-*.png`,
+  ships `model-*.joblib` (HGB refit on all years; gitignored), regenerates
+  `model_card.md` from `model_card.template.md`.
+- **Result — two numbers, both honest:** temporal test ROC-AUC **0.857**, but
+  that's flattered by recurring buildings (96% of test buildings are also in
+  train, efficiency rank is sticky). **Building-disjoint ROC-AUC 0.760** is the
+  estimate for a genuinely new building; temporal-new (n=150) is 0.65. LogReg
+  baseline ≈0.64 both ways. This **corrects the arch doc §4.4** claim that the
+  temporal split "prevents the same building's other years leaking".
+- Top features (permutation importance): `building_age` 0.17, `primary_property_type`
+  0.16, `log_gfa_total` 0.09, `number_of_floors` 0.07.
+- 30 tests green.
 
 **M1 — ingestion, complete** (branch `m1-ingestion`, PR open).
 
@@ -89,8 +110,8 @@ MySQL design — §8.8 anticipated the swap.)*
 |---|---|---|
 | **M0** | Scaffold | ✅ structure, config, tooling, one passing test — `pytest`/`ruff` green |
 | **M1** | Source spec + ingest | ✅ `teqw-tu6e` verified; `sources/seattle_energy.py` + catalog; `db/migrate.py` + `ingest/run.py`; 38,309 rows loaded to SQLite, counts match portal; `ingestion_runs` populated |
-| M2 | EDA notebook | distributions, missingness (esp. `energy_star_score`), age-vs-EUI, type-vs-emissions |
-| M3 | Baseline model | `features.py` + `train.py`; `is_high_emitter` classifier; 2022/23/24 split; metrics logged; `model_card.md` |
+| **M2** | EDA notebook | ✅ `notebooks/01_eda.ipynb` — target balance, missingness, outlier rule, weak-signal finding, leakage check (`m2-eda`) |
+| **M3** | Baseline model | ✅ `features.py` + `train.py`; HGB + LogReg baseline; temporal **and** building-disjoint splits; metrics/importance artifacts; `model_card.md` (`m3-model`) |
 | M4 | Agent loop | `describe_schema` + `run_sql` (guardrails, `ro_engine`); hand loop with `MAX_ITERS`; `trace.py` → `runs.jsonl` |
 | M5 | `predict` + `make_chart` | both tools registered; agent picks the right one per question |
 | M6 | Interface + evals | `cli.py`, `POST /ask`; `evals/questions.yaml` (12-15) + `run.py` reporting pass rate / iterations / cost |

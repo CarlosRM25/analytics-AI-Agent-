@@ -19,6 +19,9 @@ outputs/charts/*
 !outputs/charts/.gitkeep
 model/seattle_energy/artifacts/*
 !model/seattle_energy/artifacts/.gitkeep
+# commit the metrics + importance plot, not the model binary
+!model/seattle_energy/artifacts/metrics-*.json
+!model/seattle_energy/artifacts/permutation-importance-*.png
 analytics.db
 *.joblib
 

@@ -12,10 +12,11 @@ Public civic data (Seattle Building Energy Benchmarking, via the Socrata SODA
 API) → config-driven ingestion → SQLite → a pandas/scikit-learn model → a
 hand-written tool-use loop on the Claude API → a thin CLI / Flask interface.
 
-> **Status: M1 — ingestion complete.** 38,309 rows / 3,871 buildings (2015–2025)
-> load into SQLite; counts verified against the portal. `ruff` + `pytest` green
-> (21 tests). Next: M2 (EDA). Full design: `analytics-agent-architecture.md`
-> (kept with the portfolio planning docs).
+> **Status: M2 — EDA complete.** M1 loads 38,309 rows / 3,871 buildings
+> (2015–2025) into SQLite (counts verified against the portal); `notebooks/01_eda.ipynb`
+> settles the M3 target, feature set, and outlier rule. `ruff` + `pytest` green
+> (22 tests). Next: M3 (baseline model). Full design:
+> `analytics-agent-architecture.md` (kept with the portfolio planning docs).
 
 ## System overview
 
@@ -79,6 +80,7 @@ analytics-agent/
   db/                 # schema.sql, migrations/, migrate.py
   catalog/            # seattle_energy.yaml — human column docs, read by describe_schema
   model/seattle_energy/   # features.py, train.py, artifacts/, model_card.md
+  notebooks/          # 01_eda.ipynb — exploratory analysis (M2)
   agent/              # tools.py, loop.py, prompts.py, trace.py
   app/                # cli.py, api.py, limits.py, cache.py
   frontend/           # static chat UI: index.html, examples.json (offline gallery)
@@ -96,7 +98,7 @@ analytics-agent/
 |---|---|---|
 | **M0** | Scaffold | ✅ structure, `config.py`, tooling, one passing test |
 | **M1** | Source spec + ingest | ✅ `teqw-tu6e` verified; SourceSpec + catalog; migrate + ingest; 38,309 rows in SQLite, counts match portal |
-| M2 | EDA notebook | distributions, missingness, age-vs-EUI / type-vs-emissions |
+| **M2** | EDA notebook | ✅ `notebooks/01_eda.ipynb` — target balance, missingness, outlier rule, weak-signal finding, leakage check |
 | M3 | Baseline model | `is_high_emitter` classifier, 2022/23/24 split, `model_card.md` |
 | M4 | Agent loop | `describe_schema` + `run_sql` + hand loop + `trace.py` |
 | M5 | `predict` + `make_chart` | agent picks the right tool per question type |

@@ -17,6 +17,12 @@ anthropic
 
 # --- charts ---
 plotly
+kaleido             # static PNG export for notebooks (Plotly's image backend)
+
+# --- notebooks (M2 EDA) ---
+jupyterlab
+nbconvert           # headless execute: jupyter nbconvert --execute
+ipykernel
 
 # --- interface ---
 click

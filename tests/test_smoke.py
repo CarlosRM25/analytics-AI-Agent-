@@ -11,28 +11,30 @@ from pydantic import ValidationError
 import config
 from sources.base import REGISTRY, FieldMap, SourceSpec, get, register
 
-_LOCAL_SECRETS = (
-    "DB_ETL_USER",
-    "DB_ETL_PASSWORD",
-    "DB_AGENT_USER",
-    "DB_AGENT_PASSWORD",
-    "ANTHROPIC_API_KEY",
-)
+_SECRETS = ("ANTHROPIC_API_KEY", "REDIS_URL", "CORS_ALLOWED_ORIGIN", "SOCRATA_APP_TOKEN")
 
 
 def test_config_module_exposes_factory():
     assert callable(config.get_settings)
 
 
-def test_local_mode_requires_secrets(monkeypatch):
-    for var in _LOCAL_SECRETS:
+def test_local_mode_needs_no_secrets(monkeypatch):
+    for var in _SECRETS:
+        monkeypatch.delenv(var, raising=False)
+    settings = config.Settings(DEPLOY_MODE="local", _env_file=None)
+    assert settings.SQLITE_PATH.endswith("analytics.db")
+    assert settings.ANTHROPIC_API_KEY is None
+
+
+def test_deployed_mode_requires_api_key_redis_cors(monkeypatch):
+    for var in _SECRETS:
         monkeypatch.delenv(var, raising=False)
     with pytest.raises(ValidationError):
-        config.Settings(DEPLOY_MODE="local", _env_file=None)
+        config.Settings(DEPLOY_MODE="deployed", _env_file=None)
 
 
 def test_deployed_mode_ok_with_minimum(monkeypatch):
-    for var in ("ANTHROPIC_API_KEY", "REDIS_URL", "CORS_ALLOWED_ORIGIN"):
+    for var in _SECRETS:
         monkeypatch.delenv(var, raising=False)
     settings = config.Settings(
         DEPLOY_MODE="deployed",

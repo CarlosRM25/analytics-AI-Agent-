@@ -7,6 +7,10 @@ and construction fails fast if anything required for that mode is missing.
 Nothing is instantiated at import time. Call ``get_settings()`` from an entry
 point (CLI, Flask app, ingest job) so a bad environment crashes at startup, not
 on import — which keeps ``tests/`` runnable without any secrets.
+
+Storage is SQLite everywhere (decision 2026-09-07; see the architecture doc's
+section 7 amendment). ``SQLITE_PATH`` is the only storage knob — the same file
+is used read/write by ingestion and read-only by the agent.
 """
 
 from __future__ import annotations
@@ -17,14 +21,12 @@ from typing import Literal
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Local dev covers ingestion, EDA, and model work as well as the agent, and
+# SQLite needs no credentials — so nothing is strictly required locally. The
+# agent checks for ANTHROPIC_API_KEY itself when it runs (M4). The deployed
+# service exists to serve the agent, so its needs are required.
 _REQUIRED: dict[str, tuple[str, ...]] = {
-    "local": (
-        "DB_ETL_USER",
-        "DB_ETL_PASSWORD",
-        "DB_AGENT_USER",
-        "DB_AGENT_PASSWORD",
-        "ANTHROPIC_API_KEY",
-    ),
+    "local": (),
     "deployed": (
         "ANTHROPIC_API_KEY",
         "REDIS_URL",
@@ -40,16 +42,11 @@ class Settings(BaseSettings):
 
     DEPLOY_MODE: Literal["local", "deployed"] = "local"
 
-    # --- local / ingestion ---
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 3306
-    DB_NAME: str = "benchmark"
-    DB_ETL_USER: str | None = None
-    DB_ETL_PASSWORD: str | None = None
-    DB_AGENT_USER: str | None = None
-    DB_AGENT_PASSWORD: str | None = None
-    SQLITE_PATH: str = "./analytics.db"  # deployed instance reads this instead of DB_*
+    # --- storage + ingestion ---
+    SQLITE_PATH: str = "./analytics.db"
     SOCRATA_APP_TOKEN: str | None = None
+
+    # --- agent ---
     ANTHROPIC_API_KEY: str | None = None
     ANALYST_MODEL: str = "claude-opus-5"  # deployed instance sets claude-haiku-4-5
     MAX_SQL_ROWS: int = 1000

@@ -9,53 +9,50 @@ predictive, drawing a chart when a chart helps, and correcting itself when a
 query errors.
 
 Public civic data (Seattle Building Energy Benchmarking, via the Socrata SODA
-API) → config-driven ingestion → MySQL → a pandas/scikit-learn model → a
+API) → config-driven ingestion → SQLite → a pandas/scikit-learn model → a
 hand-written tool-use loop on the Claude API → a thin CLI / Flask interface.
 
-> **Status: M0 — scaffold.** Repo structure, config, and tooling are in place;
-> `pytest` and `ruff` are green. No feature logic yet. Ingestion (M1) is next.
-> Full design: `analytics-agent-architecture.md` (kept with the portfolio
-> planning docs).
+> **Status: M1 — ingestion complete.** 38,309 rows / 3,871 buildings (2015–2025)
+> load into SQLite; counts verified against the portal. `ruff` + `pytest` green
+> (21 tests). Next: M2 (EDA). Full design: `analytics-agent-architecture.md`
+> (kept with the portfolio planning docs).
 
 ## System overview
 
 ```
-                        ┌─────────────────────────────────────────────────────────────┐
-                        │                         CONFIG                                │
-                        │  sources/seattle_energy.py   catalog/seattle_energy.yaml      │
-                        │  .env  (DB x2, Socrata token, ANTHROPIC_API_KEY, caps)        │
-                        └─────────────────────────────────────────────────────────────┘
-                                              │ drives
-   ┌───────────────┐   paginated GET   ┌──────▼───────┐   upsert    ┌──────────────────┐
-   │ Socrata SODA  │ ───────────────►  │  ingest/run  │ ──────────► │   MySQL 8        │
-   │ data.seattle  │  $limit/$offset   │  (generic)   │  (etl user) │  buildings       │
-   │ .gov          │                   └──────────────┘             │  energy_records  │
-   └───────────────┘                                                │  datasets        │
-                                                                    │  ingestion_runs  │
-                          ┌──────────────────────┐   read (etl)     └────────┬─────────┘
-                          │  model/seattle_energy │ ◄─────────────────────────┘
-                          │  features.py train.py │
-                          │  artifacts/*.joblib   │
-                          │  model_card.md        │
-                          └───────────┬───────────┘
-                                      │ loaded by predict()
-   ┌──────────────┐   question   ┌────▼───────────────────────────────────┐
-   │  CLI  /      │ ───────────► │            agent loop                    │
-   │  Flask /ask  │ ◄─────────── │  Claude API (claude-opus-5, adaptive)    │
-   └──────────────┘  answer +    │  tools: list_datasets · describe_schema  │
-                     SQL + chart │         run_sql · predict · make_chart   │
-                     + usage     │  guardrails · trace · MAX_ITERS          │
-                                 └────┬───────────────────────┬────────────┘
-                                      │ SELECT only           │ writes
-                            ┌─────────▼────────┐     ┌─────────▼──────────┐
-                            │ MySQL (agent RO  │     │ outputs/charts/*.html│
-                            │ user, timeout,   │     │ logs/runs.jsonl      │
-                            │ LIMIT enforced)  │     └────────────────────┘
-                            └──────────────────┘
+                     ┌────────────────────────────────────────────────────────┐
+                     │  CONFIG   sources/seattle_energy.py   catalog/*.yaml     │
+                     │           SQLITE_PATH · SOCRATA_APP_TOKEN? · caps        │
+                     └────────────────────────────────────────────────────────┘
+                                          │ drives
+   ┌───────────────┐  paginated GET  ┌─────▼──────┐  upsert     ┌──────────────────┐
+   │ Socrata SODA  │ ──────────────► │ ingest/run │ ──────────► │  analytics.db     │
+   │ data.seattle  │  $limit/$offset │ (generic)  │  rw_engine  │  buildings        │
+   │ .gov          │                 └────────────┘             │  energy_records   │
+   └───────────────┘                                            │  datasets         │
+                                                                │  ingestion_runs   │
+                        ┌──────────────────────┐   read         └────────┬──────────┘
+                        │  model/seattle_energy │ ◄───────────────────────┘
+                        │  features.py train.py │
+                        │  artifacts/*.joblib   │
+                        └───────────┬───────────┘
+                                    │ loaded by predict()
+   ┌──────────────┐  question   ┌───▼────────────────────────────────────┐
+   │  CLI  /      │ ──────────► │            agent loop                    │
+   │  Flask /ask  │ ◄────────── │  Claude API (claude-opus-5, adaptive)    │
+   └──────────────┘  answer +   │  tools: list_datasets · describe_schema  │
+                     SQL + chart│         run_sql · predict · make_chart   │
+                     + usage    │  guardrails · trace · MAX_ITERS          │
+                                └───┬────────────────────────┬────────────┘
+                        ro_engine   │ SELECT only            │ writes
+                     (query_only) ┌─▼────────────────┐   ┌───▼────────────────┐
+                                  │  analytics.db     │   │ outputs/charts/*.html│
+                                  │  (read-only)      │   │ logs/runs.jsonl      │
+                                  └──────────────────┘   └────────────────────┘
 ```
 
-*Local / development topology. The public deployment — static page → Cloud Run →
-baked-in SQLite — is section 10 of the architecture doc.*
+*The same SQLite file is used locally and, baked into the image, in the Cloud Run
+deployment (section 10 of the architecture doc).*
 
 ## Quickstart
 
@@ -63,11 +60,15 @@ baked-in SQLite — is section 10 of the architecture doc.*
 python -m venv .venv
 .venv\Scripts\activate        # Windows;  source .venv/bin/activate on macOS/Linux
 pip install -r requirements.txt
-cp .env.example .env           # fill in when ingestion/agent work lands
 
-ruff check .
-pytest
+ruff check . && pytest
+
+python -m db.migrate                        # create analytics.db
+python -m ingest.run --source seattle_energy # load ~38k rows (~30s)
 ```
+
+No `.env` needed for local work — SQLite has no credentials. Add one (copy
+`.env.example`) when you get to the agent (M4): it needs `ANTHROPIC_API_KEY`.
 
 ## Repo layout
 
@@ -94,7 +95,7 @@ analytics-agent/
 | # | Milestone | |
 |---|---|---|
 | **M0** | Scaffold | ✅ structure, `config.py`, tooling, one passing test |
-| M1 | Source spec + ingest | confirm the Socrata resource id + fields; load energy into MySQL |
+| **M1** | Source spec + ingest | ✅ `teqw-tu6e` verified; SourceSpec + catalog; migrate + ingest; 38,309 rows in SQLite, counts match portal |
 | M2 | EDA notebook | distributions, missingness, age-vs-EUI / type-vs-emissions |
 | M3 | Baseline model | `is_high_emitter` classifier, 2022/23/24 split, `model_card.md` |
 | M4 | Agent loop | `describe_schema` + `run_sql` + hand loop + `trace.py` |

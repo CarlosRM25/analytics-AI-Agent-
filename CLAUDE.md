@@ -35,6 +35,30 @@ detail below predates those merges; treat the milestone table as current._
   0.16, `log_gfa_total` 0.09, `number_of_floors` 0.07.
 - 30 tests green.
 
+**M2 — EDA, complete** (branch `m2-eda`, stacked on `m1-ingestion`; PR open).
+
+- ✅ `notebooks/01_eda.ipynb` — Jupyter, Plotly, static-PNG outputs (GitHub
+  strips interactive Plotly). Lints + formats with `ruff` like the rest; a test
+  (`test_notebook.py`) guards that it's committed executed and error-free.
+  Rebuilt headless (`nbconvert --execute`) before each commit — no hidden state.
+- **Findings that change M3:**
+  - Target `is_high_emitter` is **50.7 / 49.3** overall and balanced within every
+    major property type — the within-type×year normalisation works.
+  - The M1 "warehouse ≈ 121" was **not a unit bug** — reported
+    `ghg_emissions_intensity` matches `total_ghg_emissions / GFA` within ±10% for
+    ~90% of rows (the residual is building-GFA vs. total-GFA as denominator). It's
+    a handful of extreme rows. `is_outlier` = Tukey 3×IQR within type×year flags
+    **1,032 rows (2.8%)** → exclude from training, keep in the DB.
+  - **Signal is weak** — every numeric feature correlation with the target is
+    < 0.13 (`log_gfa_total` strongest). M3 model card should target ROC-AUC
+    ≈ 0.60–0.68, leaning on `primary_property_type` + non-linear interactions.
+  - `energy_star_score` present for **75%** of rows, structured by property type
+    (Multifamily 84%, Hotel 96%; Data Center / Self-Storage / Lab ~0–14%) → keep
+    with a `has_energy_star` indicator, never impute.
+  - `building_age` has negatives (reported pre-completion) → NaN alongside the
+    `year_built < 1850` rule. Train/test share 96% of buildings — **not leakage**
+    here (relative label, no feature encodes it).
+
 **M1 — ingestion, complete** (branch `m1-ingestion`, PR open).
 
 - ✅ **Dataset verified** against data.seattle.gov: resource id **`teqw-tu6e`**
@@ -57,11 +81,7 @@ detail below predates those merges; treat the milestone table as current._
   [--since YEAR] [--limit N]`). **Load verified**: 38,309 / 3,871 / 2015–2025 all
   match the portal; compliance split 35,796 / 2,513 matches; FK integrity clean;
   `ingestion_runs` row `success`. 21 tests green.
-- ⚠️ **For M2 EDA:** `ghg_emissions_intensity` has property-type outliers — e.g.
-  "Non-Refrigerated Warehouse" avg ≈ 121 vs. single digits elsewhere (likely a
-  unit inconsistency upstream). This is why we need our own derived outlier flag.
-
-- **Repo:** https://github.com/CarlosRM25/analytics-AI-Agent-  (`main`; M1 on `m1-ingestion`)
+- **Repo:** https://github.com/CarlosRM25/analytics-AI-Agent-  (`main`; M1 → `m1-ingestion`, M2 → `m2-eda`)
 - **Architecture doc:** `analytics-agent-architecture.md` — lives with the
   portfolio planning docs (`../portfolio/Claude outputs/`), **follow it.**
   §11 milestone table; §12 open decisions. Amended 2026-09-07: SQLite everywhere.

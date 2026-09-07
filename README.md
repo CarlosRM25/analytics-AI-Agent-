@@ -81,6 +81,7 @@ analytics-agent/
   db/                 # schema.sql, migrations/, migrate.py
   catalog/            # seattle_energy.yaml — human column docs, read by describe_schema
   model/seattle_energy/   # features.py, train.py, artifacts/, model_card.md
+  notebooks/          # 01_eda.ipynb — exploratory analysis (M2)
   agent/              # tools.py, loop.py, prompts.py, trace.py
   app/                # cli.py, api.py, limits.py, cache.py
   frontend/           # static chat UI: index.html, examples.json (offline gallery)
@@ -98,7 +99,7 @@ analytics-agent/
 |---|---|---|
 | **M0** | Scaffold | ✅ structure, `config.py`, tooling, one passing test |
 | **M1** | Source spec + ingest | ✅ `teqw-tu6e` verified; SourceSpec + catalog; migrate + ingest; 38,309 rows in SQLite, counts match portal |
-| M2 | EDA notebook | distributions, missingness, age-vs-EUI / type-vs-emissions |
+| **M2** | EDA notebook | ✅ `notebooks/01_eda.ipynb` — target balance, missingness, outlier rule, weak-signal finding, leakage check |
 | **M3** | Baseline model | ✅ HGB + LogReg baseline; temporal + building-disjoint splits; ROC-AUC 0.86 / 0.76; `model_card.md` + metrics artifacts |
 | M4 | Agent loop | `describe_schema` + `run_sql` + hand loop + `trace.py` |
 | M5 | `predict` + `make_chart` | agent picks the right tool per question type |

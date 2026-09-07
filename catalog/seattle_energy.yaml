@@ -1,22 +1,70 @@
-# Human-readable column docs for the Seattle energy source (milestone M1).
+# Human-readable column docs for the Seattle energy source.
 #
-# describe_schema serves this joined to information_schema, so the agent sees
-# curated meanings, enum values, and known-null caveats — never the raw database.
-# Keep the energy_star_score caveat here: it is only populated for property types
-# eligible for a score (architecture doc section 4.4).
-#
-# Shape (filled in at M1):
-#   dataset:
-#     key: seattle_energy
-#     title: ...
-#     description: ...
-#   tables:
-#     buildings:
-#       description: ...
-#       columns:
-#         ose_building_id: { type: int, pk: true, doc: "..." }
-#         ...
-#     energy_records:
-#       ...
+# describe_schema (M4) serves this joined to information_schema, so the agent
+# sees curated meanings, enum values, and known-null caveats — never the raw
+# database. Names below are OUR schema names (post field_map); descriptions are
+# adapted from the data.seattle.gov metadata for resource teqw-tu6e.
 
-# TODO(M1): populate from the confirmed portal schema.
+dataset:
+  key: seattle_energy
+  title: Seattle Building Energy Benchmarking, 2015-Present
+  description: >
+    Annual energy performance filings for Seattle non-residential and multifamily
+    buildings over 20,000 sq ft, required under SMC 22.920. One row per building
+    per calendar year. ~38k rows, ~3,900 buildings, data years 2015-2025.
+  source_url: https://data.seattle.gov/resource/teqw-tu6e
+  dialect_note: >
+    MySQL 8 locally, read-only SQLite in the deployed demo. Keep SQL ANSI-ish.
+
+tables:
+
+  buildings:
+    description: >
+      One row per building (natural key ose_building_id). Attributes are treated
+      as static; ingest keeps the most recent non-null value across years, so a
+      building that changed primary use over time shows only its latest.
+    columns:
+      ose_building_id:       { type: text, pk: true, doc: "City benchmarking id (OSEBuildingID). Stored as text; values are integer-like." }
+      building_name:         { type: text, doc: "Property name on record with the City." }
+      building_type:         { type: text, doc: "City high-level class, e.g. NonResidential, Multifamily HR (10+ floors)." }
+      primary_property_type: { type: text, doc: "EPA property type — the single use accounting for >50% of floor area (source: EPAPropertyType). Best column for 'what kind of building is this'." }
+      tax_parcel_id:         { type: text, doc: "King County parcel PIN. Reserved for the future permits join; not used in v1 analysis." }
+      address:               { type: text }
+      city:                  { type: text, doc: "Almost always SEATTLE." }
+      state:                 { type: text, doc: "Almost always WA." }
+      zip_code:              { type: text }
+      neighborhood:          { type: text, doc: "Dept. of Neighborhoods area, UPPERCASE, e.g. DOWNTOWN, BALLARD, EAST." }
+      council_district:      { type: int, doc: "City council district 1-7 (boundaries as of the Nov 2023 election). Can be null." }
+      year_built:            { type: int, doc: "Construction year. 0 or null for a few records." }
+      number_of_floors:      { type: int, doc: "Occupiable floors at or above grade. Often null; unreliable for some records." }
+      number_of_buildings:   { type: int, doc: "Buildings comprising the property (a campus can be >1)." }
+      gfa_total:             { type: float, doc: "Gross floor area incl. parking, sq ft (PropertyGFATotal)." }
+      gfa_parking:           { type: float, doc: "Parking floor area, sq ft. 0 when there is no enclosed parking." }
+      latitude:              { type: float }
+      longitude:             { type: float }
+
+  energy_records:
+    description: >
+      One row per building per data year. Upsert key (ose_building_id,
+      data_year). Energy/emissions columns are null for buildings that did not
+      report usable data that year (non-compliant or exempt).
+    columns:
+      id:                      { type: int, pk: true, doc: "Surrogate key; not meaningful." }
+      ose_building_id:         { type: text, fk: buildings.ose_building_id }
+      data_year:               { type: int, doc: "Calendar year of the filing, 2015-2025." }
+      site_eui:                { type: float, doc: "Site energy use intensity from utility bills, kBtu/sf (SiteEUI)." }
+      site_eui_wn:             { type: float, doc: "Weather-normalized site EUI, kBtu/sf. Prefer this for year-over-year trend comparisons." }
+      source_eui:              { type: float, doc: "Source EUI incl. generation/transmission losses, kBtu/sf." }
+      source_eui_wn:           { type: float, doc: "Weather-normalized source EUI, kBtu/sf." }
+      site_energy_use_kbtu:    { type: float, doc: "Total on-site energy consumed, kBtu (not per sf)." }
+      energy_star_score:       { type: int, doc: "EPA 1-100 rating, 50 = national median. NULL BY DESIGN for property types ENERGY STAR does not score (e.g. many mixed-use, labs). Do not treat null as 0; filter it or add a has-score indicator." }
+      electricity_kwh:         { type: float, doc: "Annual electricity, kWh (grid + on-site renewable)." }
+      electricity_kbtu:        { type: float, doc: "Same electricity in kBtu (1 kWh = 3.412 kBtu)." }
+      natural_gas_therms:      { type: float, doc: "Annual utility natural gas, therms." }
+      natural_gas_kbtu:        { type: float, doc: "Same natural gas in kBtu." }
+      steam_kbtu:              { type: float, doc: "Annual district steam, kBtu. Null/0 for most buildings; downtown steam-loop buildings only." }
+      total_ghg_emissions:     { type: float, doc: "Total GHG emissions, metric tons CO2e." }
+      ghg_emissions_intensity: { type: float, doc: "Emissions per gross floor area, kg CO2e/sf. The headline 'how dirty per sq ft' metric; basis for the model's is_high_emitter label." }
+      compliance_status:       { type: text, enum: ["Compliant", "Not Compliant"], doc: "~93% Compliant." }
+      compliance_issue:        { type: text, doc: "Free text, e.g. 'No Issue', 'Missing Data'. Mostly 'No Issue'." }
+      demolished:              { type: int, doc: "1 if the property was demolished as of the 2023 reporting cycle, else 0. Exclude from current-stock analysis." }

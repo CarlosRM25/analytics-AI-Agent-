@@ -30,9 +30,13 @@ No feature logic yet.
 - ✅ **MySQL 8.0** already installed + running here (`MySQL80` service). Bootstrap
   script at `db/bootstrap.sql` — **Carlos runs it once as root**, sets the two
   user passwords, mirrors them into `.env`.
-- ⬜ Build `sources/seattle_energy.py` (`SourceSpec` + `field_map`),
-  `catalog/seattle_energy.yaml`, `db/migrate.py`, `ingest/run.py`. Then load and
-  check row counts / year range against the portal; `ingestion_runs` populated.
+- ✅ `sources/seattle_energy.py` (`SourceSpec` + `FIELD_MAP`) and
+  `catalog/seattle_energy.yaml` written. `FieldMap` now allows one source column
+  to feed several tables (tuple), for `osebuildingid` → both `buildings` and
+  `energy_records`. 11 hermetic tests green.
+- ⬜ Build `db/engine.py`, `db/migrate.py`, `ingest/run.py`; run the load; check
+  row counts (~38,309) / year range (2015–2025) vs. the portal; `ingestion_runs`
+  populated. **Blocked on the bootstrap above + `.env`.**
 - ⬜ Optional: register a free Socrata app token (lifts the anon rate limit).
 
 - **Repo:** https://github.com/CarlosRM25/analytics-AI-Agent-  (`main`; M1 on `m1-ingestion`)

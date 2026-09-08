@@ -1,0 +1,22 @@
+# Runtime-only deps for the Cloud Run image (M7). The repo-root requirements.txt
+# is the full dev set (adds ingestion, notebooks, training, tooling); the image
+# only serves answer_question over Flask, so it drops:
+#   requests (ingest only), kaleido (charts go back as inline HTML, not PNG),
+#   jupyterlab / nbconvert / ipykernel (notebooks), ruff / pytest (tooling),
+#   redis (M8 middleware).
+# Every package here also appears in ../requirements.txt (tests/test_deploy.py
+# enforces that).
+
+anthropic
+SQLAlchemy
+PyYAML
+sqlparse
+pandas
+scikit-learn
+joblib
+plotly
+click
+flask
+gunicorn
+pydantic-settings
+python-dotenv

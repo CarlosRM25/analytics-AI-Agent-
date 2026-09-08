@@ -78,6 +78,16 @@ def _fetch_all(spec: SourceSpec, since: int | None, limit: int | None) -> list[d
         if since is not None:
             params["$where"] = f"datayear >= '{since}'"
         resp = requests.get(url, params=params, headers=headers, timeout=_SODA_TIMEOUT)
+        if resp.status_code == 403 and headers:
+            # A stale / wrong app token 403s where anonymous would 200. Anonymous
+            # is rate-limited but fine for this ~8-page pull — drop it and retry.
+            print(
+                f"warning: {spec.app_token_env} rejected ({resp.status_code}) — "
+                "continuing anonymously",
+                file=sys.stderr,
+            )
+            headers = {}
+            resp = requests.get(url, params=params, headers=headers, timeout=_SODA_TIMEOUT)
         resp.raise_for_status()
         batch = resp.json()
         rows.extend(batch)

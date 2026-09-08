@@ -19,6 +19,7 @@ internet. Two things it does do now because they are cheap and correct:
 from __future__ import annotations
 
 import logging
+import os
 
 from flask import Blueprint, Flask, jsonify, request
 
@@ -89,16 +90,22 @@ def ask():
 
 
 def create_app() -> Flask:
-    """App factory — also the gunicorn entry point (``app.api:create_app()``)."""
+    """App factory — also the gunicorn entry point (``app.api:create_app()``).
+
+    Deployed on Cloud Run: ``gunicorn -b 0.0.0.0:$PORT 'app.api:create_app()'``
+    (see ``deploy/Dockerfile``).
+    """
     get_settings()  # fail fast on a bad environment, before serving
     app = Flask(__name__)
+    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024  # a question is a sentence, not a payload
     app.register_blueprint(bp)
     return app
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
-    create_app().run(host="127.0.0.1", port=8000, debug=False)
+    port = int(os.environ.get("PORT", "8000"))
+    create_app().run(host="127.0.0.1", port=port, debug=False)
 
 
 if __name__ == "__main__":

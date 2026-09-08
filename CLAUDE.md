@@ -11,10 +11,48 @@ boundary, but nothing here depends on the other projects.
 
 ## Status
 
-_M1–M5 merged to `main`. M6 (`m6-interface`) is an open PR. The milestone table
-is current; older milestone prose is kept for context._
+_M1–M6 merged to `main`. M7 (`m7-deploy`) is an open PR. The milestone table is
+current; older milestone prose is kept for context._
 
-**M6 — interface + evals, complete** (branch `m6-interface`, PR open).
+**M7 — containerize + deploy, complete** (branch `m7-deploy`, PR open).
+
+- ✅ `deploy/Dockerfile` — `python:3.11-slim`, non-root, installs the runtime
+  subset (`deploy/requirements.txt`, no jupyter/ruff/pytest/kaleido/requests),
+  `COPY . .` bakes in the committed `analytics.db` + `model-*.joblib`, `gunicorn
+  'app.api:create_app()'` on `$PORT`. `ENV DEPLOY_MODE=deployed
+  ANALYST_MODEL=claude-haiku-4-5 MAX_AGENT_ITERS=6`. Build fails if the
+  data/model are missing. **Not built locally — no Docker in the dev env** —
+  but the deployed *code paths* are all exercised by tests + a deployed-mode run.
+- ✅ `.dockerignore` (drops `.env`, tests, notebooks, evals, `.venv`),
+  `deploy/cloudrun.yaml` (Knative Service — `minScale: 0`, 512Mi/1cpu,
+  `ANTHROPIC_API_KEY` from Secret Manager, `gcloud run services replace`).
+- ✅ **`analytics.db` (6.5 MB) and `model/seattle_energy/artifacts/model-*.joblib`
+  (437 KB) are now committed** — the image bakes them in. Refresh when Seattle
+  republishes (~annual): `python -m ingest.run --source seattle_energy
+  --full-refresh` (+ `python -m model.seattle_energy.train`), re-commit, redeploy.
+- ✅ **Charts inline.** `make_chart` on `DEPLOY_MODE=deployed` returns
+  `{chart_data_uri: "data:text/html;base64,…"}` (self-contained Plotly HTML,
+  plotly.js from CDN — ~11 KB) instead of writing a file; `ctx.charts` and the
+  API's `chart_url` carry the URI. Local still writes `outputs/charts/*.html`.
+- ✅ **`ro_engine()` on `deployed` opens the file `mode=ro&uri=true`** — OS-level
+  read-only on top of `PRAGMA query_only` (arch doc §8.8). Local keeps the plain
+  path (Windows + `file:` URIs are fiddly). Registered `median/mean/mode`
+  aggregates still work through it.
+- ✅ `config.py` — `_REQUIRED["deployed"]` relaxed to just `ANTHROPIC_API_KEY`
+  (REDIS_URL / CORS_ALLOWED_ORIGIN move to the M8 middleware's point of use).
+  `app/api.py` caps request bodies at 16 KB and honours `$PORT`.
+- ✅ `ingest/run.py` — a stale/invalid `SOCRATA_APP_TOKEN` 403 now falls back to
+  anonymous instead of failing (anon is fine for the ~8-page pull).
+- ✅ Live-verified in `DEPLOY_MODE=deployed`: `GET /health` ok; a chart question
+  through `POST /ask` → correct answer + a `data:text/html` chart URI; eval
+  dialect-stress subset (`q08`/`q09`/`q11` — `median()`, HAVING, windows) **3/3**.
+- ✅ `tests/test_deploy.py` (7) — inline-chart vs file, `mode=ro` engine,
+  Dockerfile/manifest/`.dockerignore` shape, deploy-reqs ⊆ root-reqs.
+  `test_smoke.py` updated for the relaxed deployed contract. **84 tests green.**
+- ⚠️ `.env` `REDIS_URL` is set to a stray comment string (`# Upstash …`) — not
+  used until M8, but fix it to blank before then.
+
+**M6 — interface + evals, complete** (merged).
 
 - ✅ `app/cli.py` — `click` group. `python -m app.cli ask "…"` prints the answer,
   the SQL, chart paths, and the one-line trace summary; `--json` dumps the full
@@ -229,7 +267,7 @@ MySQL design — §8.8 anticipated the swap.)*
 | **M4** | Agent loop | ✅ `agent/` — `list_datasets`/`describe_schema`/`run_sql` (guardrails, `ro_engine`); hand loop with `MAX_ITERS`; `trace.py` → `runs.jsonl`; live-verified on Haiku, self-correcting SQL |
 | **M5** | `predict` + `make_chart` | ✅ both tools; `predict` gated on `model_module`, `make_chart` charts `data="last_query"` via `RunContext`; live-verified — agent picks the right tool per question |
 | **M6** | Interface + evals | ✅ `app/cli.py` (`analyst ask`) + `app/api.py` (`POST /ask` · `GET /health`); `evals/questions.yaml` (15) + `run.py` reporting pass rate / iterations / tokens / $-per-q / cache-hit-rate; prompt caching now engages (schema folded into the system prompt) — 15/15, ~$0.004/q on Haiku |
-| M7 | Containerize + deploy | `deploy/Dockerfile` (Flask + agent + SQLite `mode=ro`); Cloud Run; `/ask` + `/health`; `claude-haiku-4-5`; charts inline |
+| **M7** | Containerize + deploy | ✅ `deploy/Dockerfile` (`python:3.11-slim` + gunicorn + `deploy/requirements.txt`) · `.dockerignore` · `deploy/cloudrun.yaml`; `analytics.db` + `model-*.joblib` committed and baked in; `ro_engine` `mode=ro` on `deployed`; `make_chart` returns a `data:text/html` URI on `deployed`; `_REQUIRED["deployed"]` = just the API key. Live-verified in deployed mode (`/health`, a chart `/ask`, eval subset 3/3). Not `docker build`-tested — no Docker in the dev env. |
 | M8 | Public-demo hardening | `frontend/` offline gallery live; rate limits + response cache (Redis); `DEMO_ENABLED` + budget cutoff; CORS locked; alerts |
 | M9 | Expansion (stretch) | *either* a second `SourceSpec` (SPD crime `tazs-3rd5`, or Metro transit) *or* the `permits` join — not both |
 

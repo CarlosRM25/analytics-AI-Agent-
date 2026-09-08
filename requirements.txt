@@ -32,8 +32,9 @@ flask
 pydantic-settings
 python-dotenv
 
-# --- deploy: rate-limit + response cache ---
-redis
+# --- deploy (M7 Cloud Run image installs deploy/requirements.txt, a subset) ---
+gunicorn            # WSGI server in the container (Linux only)
+redis               # M8: rate-limit + response cache
 
 # --- tooling ---
 ruff

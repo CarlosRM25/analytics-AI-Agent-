@@ -21,13 +21,19 @@ outputs/charts/*
 # eval runs are noisy; one reference run is committed with `git add -f`
 evals/results/*
 !evals/results/.gitkeep
+# stray joblibs stay ignored...
+*.joblib
 model/seattle_energy/artifacts/*
 !model/seattle_energy/artifacts/.gitkeep
-# commit the metrics + importance plot, not the model binary
+# ...but the model artifacts ARE committed (M7: baked into the Cloud Run image).
+# Refresh the model with `python -m model.seattle_energy.train`.
 !model/seattle_energy/artifacts/metrics-*.json
 !model/seattle_energy/artifacts/permutation-importance-*.png
-analytics.db
-*.joblib
+!model/seattle_energy/artifacts/model-*.joblib
+
+# analytics.db IS committed (M7): the Cloud Run image bakes in a read-only
+# snapshot. Refresh with `python -m ingest.run --source seattle_energy
+# --full-refresh` when Seattle republishes (~annual), then re-commit + redeploy.
 
 # OS / editor
 .DS_Store

@@ -18,6 +18,7 @@ threads a :class:`RunContext` through :func:`run_tool` to carry that.
 
 from __future__ import annotations
 
+import base64
 import json
 import time
 import uuid
@@ -401,9 +402,19 @@ def make_chart(spec: dict, ctx: RunContext) -> dict:
     fig.update_layout(template="plotly_white", margin={"t": 60, "r": 20, "b": 50, "l": 60})
 
     ctx.chart_seq += 1
+    html = fig.to_html(include_plotlyjs="cdn", full_html=True)
+
+    if get_settings().DEPLOY_MODE == "deployed":
+        # No writable disk on Cloud Run — hand the chart back inline. A
+        # data:text/html URI renders in an <iframe src=…> on the frontend.
+        b64 = base64.b64encode(html.encode("utf-8")).decode("ascii")
+        uri = f"data:text/html;base64,{b64}"
+        ctx.charts.append(uri)
+        return {"chart_data_uri": uri, "chart_type": ctype, "n_rows": len(df)}
+
     _CHART_DIR.mkdir(parents=True, exist_ok=True)
     path = _CHART_DIR / f"{ctx.run_id}-{ctx.chart_seq}.html"
-    fig.write_html(str(path), include_plotlyjs="cdn")
+    path.write_text(html, encoding="utf-8")
     try:
         shown = str(path.relative_to(_ROOT)).replace("\\", "/")
     except ValueError:

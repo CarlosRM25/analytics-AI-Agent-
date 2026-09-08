@@ -23,15 +23,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Local dev covers ingestion, EDA, and model work as well as the agent, and
 # SQLite needs no credentials — so nothing is strictly required locally. The
-# agent checks for ANTHROPIC_API_KEY itself when it runs (M4). The deployed
-# service exists to serve the agent, so its needs are required.
+# deployed service (M7: Flask + agent + a baked-in read-only SQLite snapshot on
+# Cloud Run) only needs the API key to boot. REDIS_URL and CORS_ALLOWED_ORIGIN
+# are checked by the M8 rate-limit / CORS middleware at its point of use, not
+# here — M7 deploys without them.
 _REQUIRED: dict[str, tuple[str, ...]] = {
     "local": (),
-    "deployed": (
-        "ANTHROPIC_API_KEY",
-        "REDIS_URL",
-        "CORS_ALLOWED_ORIGIN",
-    ),
+    "deployed": ("ANTHROPIC_API_KEY",),
 }
 
 

@@ -12,17 +12,19 @@ Public civic data (Seattle Building Energy Benchmarking, via the Socrata SODA
 API) → config-driven ingestion → SQLite → a pandas/scikit-learn model → a
 hand-written tool-use loop on the Claude API → a thin CLI / Flask interface.
 
-> **Status: M6 — interface + evals complete.** M1 loads 38,309 rows to SQLite;
+> **Status: M7 — containerized for Cloud Run.** M1 loads 38,309 rows to SQLite;
 > M2 settles the target + features; M3 trains the `is_high_emitter` classifier
 > (temporal ROC-AUC 0.86, building-disjoint 0.76); **M4–M5 are a hand-written
 > tool-use loop on the Claude API** — `list_datasets` / `describe_schema` /
 > `run_sql` (guardrailed), `predict` (the M3 model), `make_chart` (Plotly).
 > **M6** adds a `click` CLI (`analyst ask`), a Flask `POST /ask` + `GET /health`,
-> and a 15-question eval harness (`evals/`) that grades the agent and reports
-> pass rate / iterations / **$ per question**. Prompt caching now engages (the
-> schema is folded into the system prompt): ~$0.004 per question on Haiku 4.5,
-> 15/15 on the eval set. `ruff` + `pytest` green (77 tests). Next: M7
-> (containerize + deploy to Cloud Run). Full design:
+> and a 15-question eval harness (`evals/`) reporting pass rate / iterations /
+> **$ per question** (~$0.004/q on Haiku 4.5 with prompt caching, 15/15).
+> **M7** is the deploy image: `deploy/Dockerfile` (slim + gunicorn) bakes in a
+> read-only `analytics.db` + the model; on `DEPLOY_MODE=deployed` the DB opens
+> `mode=ro` and charts come back as inline `data:` URIs (no writable disk).
+> `ruff` + `pytest` green (84 tests). Next: M8 (public-demo hardening — offline
+> gallery, rate limits, response cache). Full design:
 > `analytics-agent-architecture.md`.
 
 ## System overview
@@ -70,9 +72,14 @@ python -m venv .venv
 pip install -r requirements.txt
 
 ruff check . && pytest
+```
 
-python -m db.migrate                        # create analytics.db
-python -m ingest.run --source seattle_energy # load ~38k rows (~30s)
+`analytics.db` ships in the repo (a read-only snapshot). To rebuild it from
+Socrata — do this when Seattle republishes the dataset (~annual):
+
+```bash
+python -m db.migrate                          # (re)create the schema
+python -m ingest.run --source seattle_energy --full-refresh  # ~20s, ~38k rows
 ```
 
 Ask the agent a question (needs `ANTHROPIC_API_KEY` in `.env`):
@@ -83,8 +90,24 @@ python -m app.api            # serve POST /ask + GET /health on :8000
 python -m evals.run --dry-run # list the eval question set; drop --dry-run to grade (spends API $)
 ```
 
-No `.env` needed for local work — SQLite has no credentials. Add one (copy
-`.env.example`) when you get to the agent (M4): it needs `ANTHROPIC_API_KEY`.
+No `.env` needed for local queries against SQLite; the agent needs
+`ANTHROPIC_API_KEY` (copy `.env.example`).
+
+### Deploy (Cloud Run)
+
+```bash
+docker build -f deploy/Dockerfile -t analytics-agent .
+docker run --rm -p 8080:8080 -e ANTHROPIC_API_KEY=sk-ant-... analytics-agent
+curl localhost:8080/health
+
+gcloud run deploy analytics-agent --source . --region us-west1 \
+  --allow-unauthenticated --min-instances 0 \
+  --set-secrets ANTHROPIC_API_KEY=anthropic-api-key:latest
+```
+
+The image bakes in `analytics.db` (opened `mode=ro`) and the model; it runs
+`claude-haiku-4-5`, and `make_chart` returns charts as inline `data:` URIs.
+Rate limits, response cache, and CORS lock-down are M8.
 
 ## Repo layout
 
@@ -118,6 +141,6 @@ analytics-agent/
 | **M4** | Agent loop | ✅ `agent/` — 3 tools + guardrails, hand loop, `trace.py`; `python -m agent.loop "question"`; live-verified, self-correcting SQL |
 | **M5** | `predict` + `make_chart` | ✅ `predict` (M3 model, gated on `model_module`) + `make_chart` (Plotly, charts `data="last_query"`); agent picks the right tool per question |
 | **M6** | Interface + evals | ✅ `app/cli.py` + `app/api.py` (`POST /ask`, `GET /health`); `evals/` — 15 questions, grades pass rate / iterations / $-per-q; prompt caching engaged (~$0.004/q on Haiku) |
-| M7 | Containerize + deploy | Cloud Run, SQLite baked in, `claude-haiku-4-5` |
+| **M7** | Containerize + deploy | ✅ `deploy/Dockerfile` (slim + gunicorn) + `.dockerignore` + `cloudrun.yaml`; `analytics.db` + model committed and baked in; `mode=ro` DB + inline `data:` charts on `DEPLOY_MODE=deployed`; `docker build` + container run verified (`/health`, `/ask`) |
 | M8 | Public-demo hardening | offline gallery, rate limits, response cache, spend caps |
 | M9 | Expansion (stretch) | a second `SourceSpec`, or the permits join |

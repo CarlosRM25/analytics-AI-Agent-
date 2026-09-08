@@ -102,11 +102,23 @@ def rw_engine() -> Engine:
 
 @lru_cache
 def ro_engine() -> Engine:
-    """Read-only engine — writes raise SQLITE_READONLY. Agent-only."""
+    """Read-only engine — writes raise SQLITE_READONLY. Agent-only.
+
+    Deployed (Cloud Run), the file is also opened ``mode=ro`` at the OS level
+    (``file:...?mode=ro&uri=true``) — SQLite can't write the file even if a
+    ``PRAGMA`` re-enabled it. This is the connection-level guarantee §8.8 of the
+    architecture doc specified in place of the MySQL least-privilege user. Local
+    keeps the plain path (Windows + the ``file:`` URI are fiddly, and
+    ``query_only`` is enough for dev).
+    """
     path = db_path()
     if not path.exists():
         raise RuntimeError(f"{path} does not exist — run `python -m db.migrate` first")
-    engine = create_engine(f"sqlite:///{path.as_posix()}")
+    if get_settings().DEPLOY_MODE == "deployed":
+        url = f"sqlite:///file:{path.as_posix()}?mode=ro&uri=true"
+    else:
+        url = f"sqlite:///{path.as_posix()}"
+    engine = create_engine(url)
 
     @event.listens_for(engine, "connect")
     def _on_connect(dbapi_conn, _record):

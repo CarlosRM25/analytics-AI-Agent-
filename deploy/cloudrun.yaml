@@ -1,3 +1,59 @@
-# Cloud Run service config (milestone M7). Placeholder — architecture doc section 10.
-# Scales to zero; API key from Secret Manager (never in the image); CORS locked
-# to the portfolio origin; GET /health for the uptime monitor.
+# Cloud Run service (architecture doc §10). Scales to zero; the API key comes
+# from Secret Manager, never the image or the repo.
+#
+# One-time:
+#   gcloud secrets create anthropic-api-key --replication-policy=automatic
+#   printf %s "$ANTHROPIC_API_KEY" | gcloud secrets versions add anthropic-api-key --data-file=-
+#
+# Deploy (build the image however you like, then):
+#   gcloud run services replace deploy/cloudrun.yaml --region us-west1
+# or the imperative form:
+#   gcloud run deploy analytics-agent --source . --region us-west1 \
+#     --allow-unauthenticated --min-instances 0 --max-instances 3 \
+#     --memory 512Mi --cpu 1 --concurrency 4 --timeout 120 \
+#     --set-env-vars DEPLOY_MODE=deployed,ANALYST_MODEL=claude-haiku-4-5,MAX_AGENT_ITERS=6 \
+#     --set-secrets ANTHROPIC_API_KEY=anthropic-api-key:latest
+#
+# CORS lock-down and the rate-limit / response-cache env (REDIS_URL,
+# CORS_ALLOWED_ORIGIN, DEMO_ENABLED, budget caps) land in M8.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: analytics-agent
+  labels:
+    project: analytics-agent
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"   # scale to zero when idle
+        autoscaling.knative.dev/maxScale: "3"    # backstop; the app has its own caps (M8)
+        run.googleapis.com/cpu-throttling: "true"
+    spec:
+      containerConcurrency: 4
+      timeoutSeconds: 120
+      containers:
+        - image: REPLACE_WITH_IMAGE   # e.g. us-west1-docker.pkg.dev/PROJECT/web/analytics-agent:latest
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: DEPLOY_MODE
+              value: deployed
+            - name: ANALYST_MODEL
+              value: claude-haiku-4-5
+            - name: MAX_AGENT_ITERS
+              value: "6"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: anthropic-api-key
+                  key: latest
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+  traffic:
+    - percent: 100
+      latestRevision: true

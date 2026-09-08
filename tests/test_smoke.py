@@ -26,24 +26,25 @@ def test_local_mode_needs_no_secrets(monkeypatch):
     assert settings.ANTHROPIC_API_KEY is None
 
 
-def test_deployed_mode_requires_api_key_redis_cors(monkeypatch):
+def test_deployed_mode_requires_api_key(monkeypatch):
     for var in _SECRETS:
         monkeypatch.delenv(var, raising=False)
     with pytest.raises(ValidationError):
         config.Settings(DEPLOY_MODE="deployed", _env_file=None)
 
 
-def test_deployed_mode_ok_with_minimum(monkeypatch):
+def test_deployed_mode_ok_with_just_the_api_key(monkeypatch):
+    # M7: the image deploys before the M8 rate-limit/CORS middleware exists, so
+    # REDIS_URL / CORS_ALLOWED_ORIGIN are no longer required to boot.
     for var in _SECRETS:
         monkeypatch.delenv(var, raising=False)
     settings = config.Settings(
         DEPLOY_MODE="deployed",
         ANTHROPIC_API_KEY="test",
-        REDIS_URL="redis://localhost:6379",
-        CORS_ALLOWED_ORIGIN="https://example.com",
         _env_file=None,
     )
     assert settings.DEPLOY_MODE == "deployed"
+    assert settings.REDIS_URL is None and settings.CORS_ALLOWED_ORIGIN is None
     assert settings.ANALYST_MODEL == "claude-opus-5"
 
 

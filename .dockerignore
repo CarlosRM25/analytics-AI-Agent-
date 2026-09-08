@@ -1,0 +1,43 @@
+# Build context for deploy/Dockerfile. Keep it to: app code, analytics.db, and
+# model/seattle_energy/artifacts/model-*.joblib. Everything else is dev-only.
+
+.git
+.gitattributes
+.github
+
+# virtualenvs / caches
+.venv
+venv
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.ipynb_checkpoints
+
+# secrets — never bake into an image
+.env
+.env.*
+
+# dev-only trees the runtime never imports
+tests
+notebooks
+evals
+ingest
+db/migrations
+
+# runtime scratch (also gitignored)
+logs/*
+outputs/*
+!logs/.gitkeep
+!outputs/charts/.gitkeep
+
+# model artifacts we don't need at serve time (keep model-*.joblib)
+model/seattle_energy/artifacts/metrics-*.json
+model/seattle_energy/artifacts/permutation-importance-*.png
+
+# docs / editor
+*.md
+!README.md
+.idea
+.vscode
+.claude

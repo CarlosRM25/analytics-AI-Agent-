@@ -26,25 +26,41 @@ def test_local_mode_needs_no_secrets(monkeypatch):
     assert settings.ANTHROPIC_API_KEY is None
 
 
-def test_deployed_mode_requires_api_key(monkeypatch):
+def test_deployed_mode_requires_api_key_redis_and_cors(monkeypatch):
+    # M8 re-adds REDIS_URL + CORS_ALLOWED_ORIGIN: the demo middleware needs them.
     for var in _SECRETS:
         monkeypatch.delenv(var, raising=False)
     with pytest.raises(ValidationError):
         config.Settings(DEPLOY_MODE="deployed", _env_file=None)
+    with pytest.raises(ValidationError):  # api key alone is no longer enough
+        config.Settings(DEPLOY_MODE="deployed", ANTHROPIC_API_KEY="k", _env_file=None)
 
 
-def test_deployed_mode_ok_with_just_the_api_key(monkeypatch):
-    # M7: the image deploys before the M8 rate-limit/CORS middleware exists, so
-    # REDIS_URL / CORS_ALLOWED_ORIGIN are no longer required to boot.
+def test_inline_comment_values_are_treated_as_unset(monkeypatch):
+    # pydantic-settings keeps a trailing "# ..." as the value; a blank-but-
+    # commented .env line must not silently switch a feature on.
+    for var in _SECRETS:
+        monkeypatch.delenv(var, raising=False)
+    s = config.Settings(
+        DEPLOY_MODE="local",
+        TURNSTILE_SECRET="   # blank = disabled",
+        SOCRATA_APP_TOKEN="#optional",
+        _env_file=None,
+    )
+    assert s.TURNSTILE_SECRET == "" and s.SOCRATA_APP_TOKEN == ""
+
+
+def test_deployed_mode_ok_with_full_set(monkeypatch):
     for var in _SECRETS:
         monkeypatch.delenv(var, raising=False)
     settings = config.Settings(
         DEPLOY_MODE="deployed",
         ANTHROPIC_API_KEY="test",
+        REDIS_URL="redis://localhost:6379",
+        CORS_ALLOWED_ORIGIN="https://example.com",
         _env_file=None,
     )
     assert settings.DEPLOY_MODE == "deployed"
-    assert settings.REDIS_URL is None and settings.CORS_ALLOWED_ORIGIN is None
     assert settings.ANALYST_MODEL == "claude-opus-5"
 
 

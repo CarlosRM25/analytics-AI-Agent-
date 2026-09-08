@@ -8,10 +8,38 @@ from db import engine
 from sources import base as _sources_base
 
 
+def _clear_demo_singletons() -> None:
+    """Drop the M8 middleware singletons (cache / limiter / budget / redis handle)
+    so they rebuild from the current settings + ``store.client``. Does NOT touch
+    ``get_settings`` — callers that also want fresh settings clear that too."""
+    from app import budget, cache, limits, store
+
+    for fn in (store.client, cache.response_cache, limits.rate_limiter, budget.month_budget):
+        clear = getattr(fn, "cache_clear", None)  # may be monkeypatched to a plain lambda
+        if clear:
+            clear()
+
+
 def _clear_caches() -> None:
     config.get_settings.cache_clear()
     engine.rw_engine.cache_clear()
     engine.ro_engine.cache_clear()
+    _clear_demo_singletons()
+
+
+@pytest.fixture
+def fake_redis(monkeypatch):
+    """Back the response cache / rate limiter / budget with an in-memory FakeRedis.
+    Leaves ``get_settings`` alone so an autouse settings patch isn't lost."""
+    import fakeredis
+
+    from app import store
+
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(store, "client", lambda: fake)
+    _clear_demo_singletons()
+    yield fake
+    _clear_demo_singletons()
 
 
 @pytest.fixture(autouse=True)

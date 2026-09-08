@@ -1,21 +1,24 @@
-# Cloud Run service (architecture doc §10). Scales to zero; the API key comes
-# from Secret Manager, never the image or the repo.
+# Cloud Run service (architecture doc §10). Scales to zero; secrets come from
+# Secret Manager, never the image or the repo.
 #
-# One-time:
+# One-time secrets:
 #   gcloud secrets create anthropic-api-key --replication-policy=automatic
 #   printf %s "$ANTHROPIC_API_KEY" | gcloud secrets versions add anthropic-api-key --data-file=-
+#   gcloud secrets create redis-url --replication-policy=automatic
+#   printf %s "$REDIS_URL"          | gcloud secrets versions add redis-url --data-file=-
 #
-# Deploy (build the image however you like, then):
+# Deploy (build + push the image, set the two REPLACE_ values, then):
 #   gcloud run services replace deploy/cloudrun.yaml --region us-west1
 # or the imperative form:
 #   gcloud run deploy analytics-agent --source . --region us-west1 \
 #     --allow-unauthenticated --min-instances 0 --max-instances 3 \
 #     --memory 512Mi --cpu 1 --concurrency 4 --timeout 120 \
-#     --set-env-vars DEPLOY_MODE=deployed,ANALYST_MODEL=claude-haiku-4-5,MAX_AGENT_ITERS=6 \
-#     --set-secrets ANTHROPIC_API_KEY=anthropic-api-key:latest
+#     --set-env-vars DEPLOY_MODE=deployed,ANALYST_MODEL=claude-haiku-4-5,MAX_AGENT_ITERS=6,\
+# DEMO_ENABLED=true,RATE_LIMIT_PER_VISITOR_PER_DAY=5,GLOBAL_DAILY_QUESTION_CAP=300,\
+# MONTHLY_BUDGET_USD=15,CORS_ALLOWED_ORIGIN=https://YOUR-PORTFOLIO-ORIGIN \
+#     --set-secrets ANTHROPIC_API_KEY=anthropic-api-key:latest,REDIS_URL=redis-url:latest
 #
-# CORS lock-down and the rate-limit / response-cache env (REDIS_URL,
-# CORS_ALLOWED_ORIGIN, DEMO_ENABLED, budget caps) land in M8.
+# After deploying, warm the cache:  python -m deploy.warm_cache https://<service-url>
 
 apiVersion: serving.knative.dev/v1
 kind: Service
@@ -28,7 +31,7 @@ spec:
     metadata:
       annotations:
         autoscaling.knative.dev/minScale: "0"   # scale to zero when idle
-        autoscaling.knative.dev/maxScale: "3"    # backstop; the app has its own caps (M8)
+        autoscaling.knative.dev/maxScale: "3"    # backstop; the app has its own caps
         run.googleapis.com/cpu-throttling: "true"
     spec:
       containerConcurrency: 4
@@ -45,10 +48,25 @@ spec:
               value: claude-haiku-4-5
             - name: MAX_AGENT_ITERS
               value: "6"
+            - name: DEMO_ENABLED
+              value: "true"                        # flip to "false" = instant kill switch
+            - name: RATE_LIMIT_PER_VISITOR_PER_DAY
+              value: "5"
+            - name: GLOBAL_DAILY_QUESTION_CAP
+              value: "300"
+            - name: MONTHLY_BUDGET_USD
+              value: "15"
+            - name: CORS_ALLOWED_ORIGIN
+              value: REPLACE_WITH_PORTFOLIO_ORIGIN  # e.g. https://carlos.example.com
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: anthropic-api-key
+                  key: latest
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: redis-url                  # Upstash rediss:// URL
                   key: latest
           resources:
             limits:

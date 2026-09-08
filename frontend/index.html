@@ -4,17 +4,226 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Agentic Data-Analyst — Seattle building energy</title>
+    <meta
+      name="description"
+      content="An AI agent that answers natural-language questions about Seattle building-energy data — it writes its own SQL, calls a trained model, and draws charts." />
+    <!-- Where the live agent is. Empty = same origin (the Cloud Run service can
+         serve this file). For a split deploy (portfolio site + separate backend)
+         set this to the Cloud Run URL, e.g. https://analytics-agent-xxxx.run.app -->
+    <meta name="api-base" content="" />
+    <style>
+      :root {
+        --fg: #1a1a1a; --muted: #6b7280; --line: #e5e7eb; --accent: #b4491f;
+        --bg: #faf9f7; --card: #fff; --code-bg: #0f172a;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 15px/1.65 -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--fg); background: var(--bg); }
+      .wrap { max-width: 780px; margin: 0 auto; padding: 40px 20px 96px; }
+      h1 { font-size: 1.6rem; margin: 0 0 6px; }
+      .lede { color: var(--muted); margin: 0 0 8px; }
+      .lede b { color: var(--fg); }
+      .how { font-size: 13px; color: var(--muted); margin: 0 0 28px; }
+      h2.section { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 34px 0 12px; }
+
+      button { font: inherit; cursor: pointer; }
+      .cta { padding: 11px 18px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 600; }
+      .cta.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+      .cta:disabled { opacity: 0.5; cursor: default; }
+
+      form { display: flex; gap: 8px; }
+      input[type="text"] { flex: 1; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; font-size: 15px; background: #fff; }
+      .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+      .chip { padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px; background: #fff; font-size: 13px; color: var(--muted); }
+      .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+      .card { margin-top: 18px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+      .card.q { background: #f3f4f6; border: 0; font-weight: 600; }
+      .card .who { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 6px; }
+      .card .body { white-space: pre-wrap; }
+      .card .body h2 { font-size: 1.05rem; margin: 0.7em 0 0.3em; }
+      details { margin-top: 12px; font-size: 13px; }
+      summary { cursor: pointer; color: var(--muted); }
+      pre { overflow-x: auto; background: var(--code-bg); color: #e2e8f0; padding: 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.5; }
+      .card table { border-collapse: collapse; margin: 10px 0; font-size: 13.5px; display: block; overflow-x: auto; }
+      .card th, .card td { border: 1px solid var(--line); padding: 5px 10px; text-align: left; }
+      .card th { background: #f3f4f6; }
+      iframe.chart { width: 100%; height: 440px; border: 1px solid var(--line); border-radius: 10px; margin-top: 12px; background: #fff; }
+      .meta { margin-top: 10px; font-size: 12px; color: var(--muted); }
+      .note { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: #fdf2ec; color: #7c3a1c; font-size: 13.5px; }
+      .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: s 0.8s linear infinite; vertical-align: -2px; }
+      @keyframes s { to { transform: rotate(360deg); } }
+      [hidden] { display: none !important; }
+    </style>
   </head>
   <body>
-    <!-- Placeholder. Built at milestone M8 (architecture doc section 10).
-         Offline-first: a "what this is" paragraph, a recorded walkthrough, and
-         ~8 pre-run Q&A rendered from examples.json (question + SQL + answer +
-         chart), all with zero backend calls. "Ask your own question" is an
-         explicit opt-in that reveals an input and POSTs to the Cloud Run /ask
-         endpoint. -->
-    <main>
+    <div class="wrap">
       <h1>Agentic Data-Analyst</h1>
-      <p>Coming soon — offline gallery + live demo.</p>
-    </main>
+      <p class="lede">
+        Ask a natural-language question about <b>Seattle's building-energy benchmarking data</b>
+        — ~38,000 annual filings from 3,871 buildings, 2015–2025.
+      </p>
+      <p class="how">
+        The agent explores the database schema, writes and runs its own SQL, calls a trained
+        model for predictive questions, draws a chart when a chart is the answer, and corrects
+        itself when a query errors. Every answer shows the SQL it ran.
+      </p>
+
+      <h2 class="section">Examples</h2>
+      <p class="how" id="gallery-note">Pre-run — no backend call. Loading…</p>
+      <div id="gallery"></div>
+
+      <h2 class="section">Ask your own</h2>
+      <div id="ask-teaser">
+        <button class="cta" id="reveal">Ask your own question →</button>
+      </div>
+      <div id="ask-panel" hidden>
+        <form id="f">
+          <input
+            type="text" id="q" autocomplete="off"
+            placeholder="e.g. which property types have the worst emissions intensity?" />
+          <button class="cta" id="go" type="submit">Ask</button>
+        </form>
+        <div class="chips" id="chips"></div>
+        <div id="thread"></div>
+      </div>
+    </div>
+
+    <script>
+      const API_BASE = (document.querySelector('meta[name="api-base"]')?.content || "").replace(/\/$/, "");
+      const CHIPS = [
+        "How has average office energy use changed since 2018?",
+        "Which neighborhood has the most benchmarked buildings?",
+        "Chart total citywide GHG emissions by year",
+        "What would the model expect for a 1970s hotel of 150,000 sq ft?",
+        "What share of filings are compliant?",
+      ];
+
+      const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+      // Minimal Markdown: GFM pipe tables, ATX headings, bold. Enough for the
+      // agent's answers; not a general renderer.
+      function mdTables(text) {
+        const rowCells = (line) => line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+        const isSep = (line) => /^\s*\|?[\s:-]*\|[\s:|-]*$/.test(line) && line.includes("-");
+        const lines = text.split("\n");
+        const out = [];
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].includes("|") && i + 1 < lines.length && isSep(lines[i + 1])) {
+            const head = rowCells(lines[i]);
+            let j = i + 2;
+            const body = [];
+            while (j < lines.length && lines[j].includes("|") && lines[j].trim()) body.push(rowCells(lines[j++]));
+            const th = head.map((c) => `<th>${c}</th>`).join("");
+            const trs = body.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("");
+            out.push(`<table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`);
+            i = j - 1;
+          } else {
+            out.push(lines[i]);
+          }
+        }
+        return out.join("\n");
+      }
+      const mdish = (s) =>
+        mdTables(esc(s))
+          .replace(/^\s*#{1,6}\s*(.+)$/gm, "<h2>$1</h2>")
+          .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+
+      // Render one Q&A card (used by both the gallery and live answers).
+      function cardHTML(item, opts = {}) {
+        const sqls = (item.sql || (item.steps || []).filter((s) => s.sql).map((s) => s.sql));
+        const chart =
+          item.chart || (item.steps || []).map((s) => s.chart_url).find(Boolean) || null;
+        let h = `<div class="who">analyst${opts.cached ? " · cached" : ""}</div>`;
+        h += `<div class="body">${mdish(item.answer || "(no answer)")}</div>`;
+        if (chart) h += `<iframe class="chart" sandbox="allow-scripts allow-same-origin" src="${chart}"></iframe>`;
+        if (sqls && sqls.length)
+          h += `<details><summary>SQL (${sqls.length})</summary><pre>${esc(sqls.join(";\n\n"))}</pre></details>`;
+        if (opts.meta) h += `<div class="meta">${opts.meta}</div>`;
+        return h;
+      }
+
+      // --- gallery (offline) ---
+      fetch("examples.json")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((items) => {
+          const g = document.getElementById("gallery");
+          const note = document.getElementById("gallery-note");
+          if (!items.length) { note.textContent = "Gallery not generated yet."; return; }
+          note.textContent = "Pre-run — no backend call.";
+          for (const it of items) {
+            const q = document.createElement("div");
+            q.className = "card q";
+            q.textContent = it.question;
+            const a = document.createElement("div");
+            a.className = "card";
+            a.innerHTML = cardHTML(it);
+            g.append(q, a);
+          }
+        })
+        .catch(() => (document.getElementById("gallery-note").textContent = "Gallery unavailable."));
+
+      // --- ask your own (opt-in) ---
+      document.getElementById("reveal").addEventListener("click", () => {
+        document.getElementById("ask-teaser").hidden = true;
+        document.getElementById("ask-panel").hidden = false;
+        document.getElementById("q").focus();
+      });
+
+      const chipBox = document.getElementById("chips");
+      for (const t of CHIPS) {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "chip"; b.textContent = t;
+        b.onclick = () => { document.getElementById("q").value = t; document.getElementById("f").requestSubmit(); };
+        chipBox.appendChild(b);
+      }
+
+      const thread = document.getElementById("thread");
+      const input = document.getElementById("q");
+      const go = document.getElementById("go");
+
+      function addCard(cls, html) {
+        const d = document.createElement("div");
+        d.className = "card " + cls;
+        d.innerHTML = html;
+        thread.prepend(d);
+        return d;
+      }
+
+      document.getElementById("f").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const question = input.value.trim();
+        if (!question) return;
+        input.value = ""; go.disabled = true;
+        addCard("q", esc(question));
+        const box = addCard("", `<div class="who">analyst</div><div class="body"><span class="spin"></span> thinking…</div>`);
+        const t0 = performance.now();
+        try {
+          const r = await fetch(API_BASE + "/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question }),
+          });
+          const data = await r.json();
+          if (data.disabled) {
+            box.innerHTML = `<div class="note">The live demo is paused right now — the examples above still work.</div>`;
+            return;
+          }
+          if (data.limited) {
+            box.innerHTML = `<div class="note">You've hit the ${data.scope === "global" ? "daily" : "per-visitor"} question limit for the demo. Browse the examples above.</div>`;
+            return;
+          }
+          if (data.error) { box.querySelector(".body").textContent = "Error: " + data.error; return; }
+          const secs = ((performance.now() - t0) / 1000).toFixed(1);
+          const u = data.usage || {};
+          const meta = `${data.stopped || ""} · ${(u.tokens || 0).toLocaleString()} tok · $${(u.cost_usd || 0).toFixed(4)} · ${secs}s`;
+          box.innerHTML = cardHTML(data, { cached: data.cached, meta });
+        } catch (err) {
+          box.querySelector(".body").textContent = "Request failed: " + err;
+        } finally {
+          go.disabled = false;
+          input.focus();
+        }
+      });
+    </script>
   </body>
 </html>

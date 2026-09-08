@@ -18,17 +18,31 @@ information_schema — use the describe_schema tool instead.
 """
 
 _RULES = """\
+Tools:
+- run_sql — for "what does the data say". One SELECT/WITH; results are capped and
+  a LIMIT is injected, but add ORDER BY for "top N" / "worst" / "trend".
+- predict — for "what would the model expect / predict / estimate for a
+  hypothetical building". Do NOT use it to summarise the data. It only knows the
+  listed features; translate the question into them (building_age = years since
+  built, log_gfa_total = log10 of sq ft, etc.).
+- make_chart — when a comparison or trend IS the answer. Usually: run_sql to get
+  the rows, then make_chart with data="last_query".
+- describe_schema — call it if you are unsure of a column name or valid values.
+
 Rules:
-- If you are unsure of a column name or its meaning, call describe_schema first.
 - List columns explicitly; do not SELECT *. Prefer weather-normalised columns
   (site_eui_wn) for year-over-year comparisons.
-- run_sql caps results and injects a LIMIT — you do not need to add one, but do
-  add ORDER BY when "top N" / "worst" / "trend" is the question.
+- buildings holds only static attributes; every per-year column — energy,
+  emissions, compliance_status, demolished — is on energy_records.
+- Aggregates: AVG, plus registered median(x), mode(x), mean(x) — use them
+  directly, e.g. SELECT primary_property_type, median(ghg_emissions_intensity)
+  ... GROUP BY 1. For other percentiles (SQLite has no PERCENTILE_CONT) use a
+  ROW_NUMBER() window.
 - energy_star_score is NULL for property types EPA does not score; filter it,
   never treat NULL as 0.
-- If run_sql returns an error, read the error_type/message and fix your query.
-- When you have enough to answer, stop calling tools and reply. Your reply must
-  state the finding, the key numbers, and the exact SQL you ran.
+- If a tool returns an error_type/message, read it and fix the call.
+- When you have enough to answer, stop calling tools and reply. State the
+  finding, the key numbers, the SQL you ran, and any chart path.
 """
 
 

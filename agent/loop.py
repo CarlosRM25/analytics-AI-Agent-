@@ -11,6 +11,7 @@ current models — output is shaped by the system prompt).
 
 from __future__ import annotations
 
+import contextlib
 import sys
 import time
 from dataclasses import dataclass, field
@@ -18,7 +19,7 @@ from dataclasses import dataclass, field
 import anthropic
 
 from agent.prompts import build_system_prompt
-from agent.tools import TOOL_SCHEMAS, run_tool
+from agent.tools import RunContext, run_tool, tool_schemas
 from agent.trace import Trace
 from config import get_settings
 
@@ -30,6 +31,7 @@ _RATE_LIMIT_RETRIES = 2
 class AnswerResult:
     answer: str
     sql: list[str] = field(default_factory=list)
+    charts: list[str] = field(default_factory=list)
     steps: list[dict] = field(default_factory=list)
     trace: dict = field(default_factory=dict)
     stopped: str = "end_turn"  # end_turn | max_iters | refusal
@@ -38,6 +40,8 @@ class AnswerResult:
         print(self.answer.strip() or "(no answer)")
         for i, q in enumerate(self.sql, 1):
             print(f"\n--- SQL {i} ---\n{q.strip()}")
+        for chart in self.charts:
+            print(f"\n--- chart: {chart}")
         print(f"\n{self.trace.get('summary', '')}")
 
 
@@ -53,7 +57,7 @@ def _thinking(model: str):
     return anthropic.NOT_GIVEN
 
 
-def _create(client: anthropic.Anthropic, model: str, system: list[dict], messages: list[dict]):
+def _create(client, model: str, system: list[dict], tools: list[dict], messages: list[dict]):
     last_exc: Exception | None = None
     for attempt in range(_RATE_LIMIT_RETRIES + 1):
         try:
@@ -61,7 +65,7 @@ def _create(client: anthropic.Anthropic, model: str, system: list[dict], message
                 model=model,
                 max_tokens=_MAX_TOKENS,
                 system=system,
-                tools=TOOL_SCHEMAS,
+                tools=tools,
                 thinking=_thinking(model),
                 messages=messages,
             )
@@ -88,13 +92,15 @@ def answer_question(question: str, *, source: str = "seattle_energy") -> AnswerR
 
     client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     system = build_system_prompt(source)
+    tools = tool_schemas(source)
     messages: list[dict] = [{"role": "user", "content": question}]
     trace = Trace(question=question, model=settings.ANALYST_MODEL)
+    ctx = RunContext()
 
     stopped = "max_iters"
     answer = ""
     for _ in range(settings.MAX_AGENT_ITERS):
-        resp = _create(client, settings.ANALYST_MODEL, system, messages)
+        resp = _create(client, settings.ANALYST_MODEL, system, tools, messages)
         trace.record_response(resp)
 
         if resp.stop_reason == "refusal":
@@ -111,7 +117,7 @@ def answer_question(question: str, *, source: str = "seattle_energy") -> AnswerR
                 continue
             t0 = time.monotonic()
             tool_input = dict(block.input)
-            payload, is_error = run_tool(block.name, tool_input)
+            payload, is_error = run_tool(block.name, tool_input, ctx)
             trace.record_tool(
                 block.name, tool_input, payload, (time.monotonic() - t0) * 1000, is_error
             )
@@ -128,10 +134,11 @@ def answer_question(question: str, *, source: str = "seattle_energy") -> AnswerR
         answer = "Reached the step limit before finishing. Partial trace below."
 
     trace_dict = trace.to_dict() | {"summary": trace.summary(), "stopped": stopped}
-    trace.flush({"stopped": stopped})
+    trace.flush({"stopped": stopped, "charts": ctx.charts})
     return AnswerResult(
         answer=answer,
         sql=trace.sql_run(),
+        charts=ctx.charts,
         steps=trace.steps,
         trace=trace_dict,
         stopped=stopped,
@@ -139,6 +146,9 @@ def answer_question(question: str, *, source: str = "seattle_energy") -> AnswerR
 
 
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        with contextlib.suppress(AttributeError, ValueError):
+            stream.reconfigure(encoding="utf-8", errors="replace")  # answers contain CO₂e, — etc.
     args = argv if argv is not None else sys.argv[1:]
     if not args:
         print('usage: python -m agent.loop "your question"', file=sys.stderr)

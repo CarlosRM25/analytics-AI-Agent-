@@ -12,13 +12,15 @@ Public civic data (Seattle Building Energy Benchmarking, via the Socrata SODA
 API) → config-driven ingestion → SQLite → a pandas/scikit-learn model → a
 hand-written tool-use loop on the Claude API → a thin CLI / Flask interface.
 
-> **Status: M4 — agent loop complete.** M1 loads 38,309 rows to SQLite; M2
+> **Status: M5 — agent tools complete.** M1 loads 38,309 rows to SQLite; M2
 > settles the target + features; M3 trains the `is_high_emitter` classifier
-> (temporal ROC-AUC 0.86, building-disjoint 0.76); **M4 is a hand-written
-> tool-use loop on the Claude API** (`list_datasets` / `describe_schema` /
-> `run_sql` with guardrails) — live-verified on Haiku 4.5, self-correcting its
-> SQL, ~$0.007–0.04 per question. `ruff` + `pytest` green (46 tests). Next: M5
-> (`predict` + `make_chart`). Full design: `analytics-agent-architecture.md`.
+> (temporal ROC-AUC 0.86, building-disjoint 0.76); **M4–M5 are a hand-written
+> tool-use loop on the Claude API** — `list_datasets` / `describe_schema` /
+> `run_sql` (guardrailed), `predict` (the M3 model), `make_chart` (Plotly).
+> Live-verified on Haiku 4.5: self-correcting SQL, picks `predict` for "what
+> would the model expect", charts its last query. `ruff` + `pytest` green
+> (56 tests). Next: M6 (CLI + eval harness). Full design:
+> `analytics-agent-architecture.md`.
 
 ## System overview
 
@@ -103,7 +105,7 @@ analytics-agent/
 | **M2** | EDA notebook | ✅ `notebooks/01_eda.ipynb` — target balance, missingness, outlier rule, weak-signal finding, leakage check |
 | **M3** | Baseline model | ✅ HGB + LogReg baseline; temporal + building-disjoint splits; ROC-AUC 0.86 / 0.76; `model_card.md` + metrics artifacts |
 | **M4** | Agent loop | ✅ `agent/` — 3 tools + guardrails, hand loop, `trace.py`; `python -m agent.loop "question"`; live-verified, self-correcting SQL |
-| M5 | `predict` + `make_chart` | agent picks the right tool per question type |
+| **M5** | `predict` + `make_chart` | ✅ `predict` (M3 model, gated on `model_module`) + `make_chart` (Plotly, charts `data="last_query"`); agent picks the right tool per question |
 | M6 | Interface + evals | `cli.py`, `POST /ask`, `evals/` reporting pass rate / cost |
 | M7 | Containerize + deploy | Cloud Run, SQLite baked in, `claude-haiku-4-5` |
 | M8 | Public-demo hardening | offline gallery, rate limits, response cache, spend caps |

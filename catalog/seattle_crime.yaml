@@ -1,0 +1,128 @@
+# Human-readable column docs for the SPD Crime source (M9).
+#
+# Same contract as catalog/seattle_energy.yaml: describe_schema and the system
+# prompt are built from this file joined to live SQLite introspection — the agent
+# never sees the raw DB. OUR schema names (post field_map); descriptions adapted
+# from the data.seattle.gov metadata for resource tazs-3rd5.
+
+dataset:
+  key: seattle_crime
+  title: SPD Crime Data (NIBRS)
+  description: >
+    Offenses reported to the Seattle Police Department, coded to the FBI's
+    National Incident-Based Reporting System (NIBRS). One row per offense within
+    a police report (a report can list several). The full set is ~1.56M rows back
+    to 2008; this database holds a recent slice (2024-present, ~214k rows). Use
+    report_year / report_datetime for time filters.
+  source_url: https://data.seattle.gov/resource/tazs-3rd5
+  dialect_note: >
+    SQLite. Window functions and CTEs are available, plus registered aggregates
+    median(x), mode(x), mean(x) alongside avg(x). Dates are ISO-8601 text — use
+    substr()/strftime() or the report_year integer column. The agent connects
+    read-only (PRAGMA query_only).
+
+tables:
+
+  crime_incidents:
+    description: >
+      One row per offense (natural key offense_id). Flat table — no dimension to
+      join. Many rows share a report_number. Geography is anonymised: addresses
+      are blurred to the block, and a chunk of lat/long is missing or REDACTED.
+    columns:
+      offense_id:           { type: text, pk: true, doc: "Unique id for this offense within its report. Stored as text (large integer-like)." }
+      report_number:        { type: text, doc: "SPD report number, format YYYY-NNNNNN. One report can contain multiple offense rows." }
+      report_datetime:      { type: text, doc: "When the report was filed, ISO-8601 local time (e.g. 2025-06-14T21:03:00.000)." }
+      report_year:          { type: int, doc: "Calendar year of report_datetime. Derived at ingest; use this for GROUP BY year and range filters." }
+      offense_datetime:     { type: text, doc: "When the offense occurred (ISO-8601). Can be earlier than report_datetime; sometimes a coarse estimate." }
+      group_a_b:            { type: text, enum: ["A", "B"], doc: "NIBRS Group A (serious offenses, always reported) vs Group B (less serious, reported on arrest). Null for a handful of rows." }
+      crime_against:        { type: text, enum: ["PERSON", "PROPERTY", "SOCIETY", "NOT_A_CRIME", "ANY"], doc: "NIBRS 'crime against' class. NOT_A_CRIME / ANY are administrative; exclude them for 'real crime' counts." }
+      offense_category:     { type: text, enum: ["VIOLENT CRIME", "PROPERTY CRIME", "ALL OTHER"], doc: "SPD's coarse rollup. Best column for a high-level violent-vs-property cut. 'ALL OTHER' is large (drugs, fraud, warrants, non-NIBRS)." }
+      offense_sub_category: { type: text, doc: "Mid-level grouping, e.g. LARCENY-THEFT, ASSAULT OFFENSES, BURGLARY, MOTOR VEHICLE THEFT, ROBBERY. '999' means uncoded." }
+      offense_code:         { type: text, doc: "NIBRS offense code, e.g. '13B' (simple assault), '23F' (theft from vehicle), '240' (motor vehicle theft)." }
+      offense_description:  { type: text, doc: "Text for offense_code, e.g. 'Theft From Motor Vehicle', 'Simple Assault', 'Burglary/Breaking & Entering'. ~47 values. 'Not Reportable to NIBRS' pairs with sub_category '999'." }
+      shooting_type:        { type: text, doc: "Populated ONLY for shooting incidents: 'Shots Fired (...)', 'Shooting (Non-Fatal Injury)', 'Shooting (Fatal Injury)'. NULL for ~99% of rows — filter IS NOT NULL to get gun incidents." }
+      block_address:        { type: text, doc: "Address anonymised to the block ('26XX BLOCK OF NE 46TH ST') or an intersection. 'REDACTED' rows are nulled at ingest." }
+      precinct:             { type: text, enum: ["North", "East", "South", "West", "Southwest"], doc: "SPD precinct. Also 'OOJ' (out of jurisdiction). Null for a few rows." }
+      sector:               { type: text, doc: "Precinct subdivision (one uppercase letter, ~21 values)." }
+      beat:                 { type: text, doc: "Patrol beat (letter+digit, e.g. 'N2', ~55 values). beat is inside sector is inside precinct." }
+      neighborhood:         { type: text, doc: "Micro-Community Policing Plan (MCPP) area, UPPERCASE, e.g. CAPITOL HILL, DOWNTOWN COMMERCIAL, BALLARD SOUTH, SLU/CASCADE. ~60 values. Not the same list as the energy source's neighborhood." }
+      reporting_area:       { type: text, doc: "Numeric SPD reporting-area id. Finer than beat; mostly useful as a key, not a label." }
+      latitude:             { type: float, doc: "Approx offense latitude. NULL where unknown (source sentinels -1.0 / 0.0 / REDACTED are nulled at ingest)." }
+      longitude:            { type: float, doc: "Approx offense longitude, same null caveat." }
+
+prompt:
+  facts: |
+    What's in the data (this database holds a recent slice, not all 1.5M rows):
+    - ~213,600 crime_incidents, report_year 2024-2026 (2026 is partial). Roughly
+      82k in 2024, 78k in 2025.
+    - offense_category splits ~PROPERTY CRIME 47% / ALL OTHER 46% / VIOLENT CRIME 7%.
+      'ALL OTHER' is huge (drug, fraud, warrant, and non-NIBRS rows).
+    - precinct counts: North ~65k, West ~56k, East ~40k, South ~30k, Southwest
+      ~20k, plus ~1.7k 'OOJ' (out of jurisdiction).
+    - ~16% of rows have no latitude/longitude or block_address (missing or REDACTED,
+      nulled at ingest). shooting_type is set on only ~1% of rows.
+    - most common offense_description: 'Theft From Motor Vehicle',
+      'Burglary/Breaking & Entering', 'Destruction/Damage/Vandalism of Property',
+      'Motor Vehicle Theft', 'All Other Larceny', 'Simple Assault'.
+    - one report_number can have several offense_id rows.
+  examples: |
+    Worked examples (patterns to copy):
+
+    # "Which precinct had the most property crime in 2025?"
+    SELECT precinct, COUNT(*) AS n
+    FROM crime_incidents
+    WHERE report_year = 2025 AND offense_category = 'PROPERTY CRIME'
+          AND precinct IS NOT NULL
+    GROUP BY 1
+    ORDER BY n DESC;
+
+    # "How have shootings trended?"  (shooting_type is the flag; trend -> chart)
+    SELECT report_year, COUNT(*) AS shootings
+    FROM crime_incidents
+    WHERE shooting_type IS NOT NULL
+    GROUP BY 1
+    ORDER BY 1;
+
+    # "Car prowls by month in 2025"  (month = first 7 chars of the datetime)
+    SELECT substr(report_datetime, 1, 7) AS month, COUNT(*) AS n
+    FROM crime_incidents
+    WHERE offense_description = 'Theft From Motor Vehicle'
+          AND report_year = 2025
+    GROUP BY 1
+    ORDER BY 1;
+
+    # "Top offense types in Capitol Hill"
+    SELECT offense_description, COUNT(*) AS n
+    FROM crime_incidents
+    WHERE neighborhood = 'CAPITOL HILL'
+    GROUP BY 1
+    ORDER BY n DESC
+    LIMIT 10;
+
+    # "Violent-crime share by precinct"
+    SELECT precinct,
+           ROUND(100.0 * SUM(offense_category = 'VIOLENT CRIME') / COUNT(*), 1) AS pct_violent
+    FROM crime_incidents
+    WHERE precinct IS NOT NULL
+    GROUP BY 1
+    ORDER BY pct_violent DESC;
+  values: |
+    Column values (match spelling exactly):
+    - offense_category: 'VIOLENT CRIME', 'PROPERTY CRIME', 'ALL OTHER'.
+    - crime_against: 'PERSON', 'PROPERTY', 'SOCIETY', 'NOT_A_CRIME', 'ANY'
+      (exclude NOT_A_CRIME / ANY for "real crime" counts).
+    - group_a_b: 'A' or 'B'.
+    - precinct: 'North', 'East', 'South', 'West', 'Southwest' (Title Case), plus 'OOJ'.
+    - neighborhood (MCPP, UPPERCASE): e.g. 'CAPITOL HILL', 'DOWNTOWN COMMERCIAL',
+      'SLU/CASCADE', 'QUEEN ANNE', 'UNIVERSITY', 'NORTHGATE', 'FIRST HILL',
+      'BALLARD SOUTH', 'BELLTOWN'. ~60 values — not the energy source's list.
+    - offense_sub_category '999' and offense_description 'Not Reportable to NIBRS'
+      mark administrative / non-crime rows.
+  rules: |
+    Source-specific:
+    - This is a flat table — no joins. Use report_year for year filters and
+      GROUP BY; use substr(report_datetime, 1, 7) for month.
+    - report_datetime is when it was reported; offense_datetime is when it
+      happened (can be earlier / fuzzier).
+    - 2026 is a partial year — say so when comparing years.
+    - For "gun violence" filter shooting_type IS NOT NULL.

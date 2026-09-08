@@ -35,7 +35,14 @@ class FieldMap:
 
 @dataclass(frozen=True, slots=True)
 class SourceSpec:
-    """Immutable description of one dataset. One per source module."""
+    """Immutable description of one dataset. One per source module.
+
+    The first source (``seattle_energy``) is a parent/child pair with a
+    slowly-changing dimension keyed by a bare year. Everything past
+    ``model_module`` is the small generalisation the *second* source
+    (``seattle_crime`` — one flat table, a datetime not a year, no dimension)
+    needed; a third source should now be config only.
+    """
 
     key: str
     socrata_domain: str
@@ -48,6 +55,24 @@ class SourceSpec:
     catalog_path: str
     model_module: str | None = None
     refresh: str = "annual"
+
+    # source column used by `--since` and for the dataset's year range
+    time_column: str = "datayear"
+    # True when time_column is an ISO datetime (`--since 2024` -> `>= '2024-01-01'`)
+    time_is_datetime: bool = False
+    # OUR column, in the fact table, holding the integer year (for datasets/list_datasets)
+    year_column: str = "data_year"
+    # a slowly-changing dimension table (kept as latest-non-null per key), or None
+    static_table: str | None = None
+    # source column whose value orders "latest" for static_table
+    static_sort_key: str | None = None
+    # extra raw string values that coerce to NULL (on top of "" and "NA")
+    null_tokens: tuple[str, ...] = ()
+
+    @property
+    def fact_table(self) -> str:
+        """The table row counts / the year range come from (the last target)."""
+        return self.target_tables[-1]
 
     def field_targets(self) -> Iterator[tuple[str, FieldMap]]:
         """Yield ``(source_column, FieldMap)`` once per target, flattening any

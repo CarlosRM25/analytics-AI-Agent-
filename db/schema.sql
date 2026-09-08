@@ -87,5 +87,39 @@ CREATE TABLE IF NOT EXISTS ingestion_runs (
 
 CREATE INDEX IF NOT EXISTS ix_runs_dataset ON ingestion_runs (dataset_key, started_at);
 
+-- ---------------------------------------------------------------------------
+-- Source: SPD Crime Data (NIBRS), "SPD Crime Data: 2008-Present"
+--   https://data.seattle.gov/resource/tazs-3rd5.json   (~1.56M rows total)
+-- The second dataset (M9), proving the sources/ plug-in abstraction: one flat
+-- table, no slowly-changing dimension, a datetime instead of a year, no model.
+-- Column names below are OUR names; mapping lives in sources/seattle_crime.py.
+-- Loaded as a recent slice (`ingest.run --source seattle_crime --since 2024`).
+CREATE TABLE IF NOT EXISTS crime_incidents (
+  offense_id           TEXT NOT NULL PRIMARY KEY,  -- source: offense_id (one offense within a report)
+  report_number        TEXT,                       -- source: report_number (a report can have many offenses)
+  report_datetime      TEXT,                       -- source: report_date_time (ISO-8601 local)
+  report_year          INTEGER,                    -- derived from report_datetime, for range + grouping
+  offense_datetime     TEXT,                       -- source: offense_date (when it occurred; may precede the report)
+  group_a_b            TEXT,                       -- source: nibrs_group_a_b ('A' serious / 'B' less serious)
+  crime_against        TEXT,                       -- source: nibrs_crime_against_category (PERSON | PROPERTY | SOCIETY | ...)
+  offense_category     TEXT,                       -- source: offense_category (VIOLENT CRIME | PROPERTY CRIME | ALL OTHER)
+  offense_sub_category TEXT,                       -- source: offense_sub_category (e.g. LARCENY-THEFT, ASSAULT OFFENSES)
+  offense_code         TEXT,                       -- source: nibrs_offense_code (e.g. '13B')
+  offense_description  TEXT,                       -- source: nibrs_offense_code_description (e.g. 'Simple Assault')
+  shooting_type        TEXT,                       -- source: shooting_type_group (null unless a shooting incident)
+  block_address        TEXT,                       -- source: block_address (anonymised to the block / intersection)
+  precinct             TEXT,                       -- North | East | South | West | Southwest
+  sector               TEXT,
+  beat                 TEXT,
+  neighborhood         TEXT,                       -- source: neighborhood (MCPP name, UPPERCASE)
+  reporting_area       TEXT,
+  latitude             REAL,                       -- source: latitude (sentinels -1.0 / 'REDACTED' -> NULL)
+  longitude            REAL
+);
+
+CREATE INDEX IF NOT EXISTS ix_crime_year ON crime_incidents (report_year);
+CREATE INDEX IF NOT EXISTS ix_crime_category ON crime_incidents (offense_category);
+CREATE INDEX IF NOT EXISTS ix_crime_precinct ON crime_incidents (precinct);
+
 -- permits (v2, deferred) — Building Permits dataset joined on tax_parcel_id /
 -- address, for "did this building renovate, and did efficiency change after?"

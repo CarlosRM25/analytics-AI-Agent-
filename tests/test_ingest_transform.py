@@ -17,6 +17,8 @@ def test_coerce_typed_values():
     assert _coerce("2.5", "int") == 2  # round-half-to-even, then int
     assert _coerce(False, "bool") == 0
     assert _coerce(True, "bool") == 1
+    assert _coerce("2025-06-14T21:03:00.000", "year") == 2025  # M9: datetime -> year
+    assert _coerce("x", "str", null_tokens=("x", "-")) is None  # M9: per-source null tokens
 
 
 def test_coerce_unparseable_number_to_none():
@@ -25,16 +27,17 @@ def test_coerce_unparseable_number_to_none():
 
 
 def test_dedupe_latest_non_null():
+    # rows arrive out of order; __sort (the source year) decides latest
     rows = [
-        {"ose_building_id": "1", "year_built": 1990, "neighborhood": None, "__year": 2015},
-        {"ose_building_id": "1", "year_built": None, "neighborhood": "DOWNTOWN", "__year": 2020},
-        {"ose_building_id": "2", "year_built": 1975, "neighborhood": "BALLARD", "__year": 2018},
+        {"ose_building_id": "1", "year_built": None, "neighborhood": "DOWNTOWN", "__sort": 2020},
+        {"ose_building_id": "1", "year_built": 1990, "neighborhood": None, "__sort": 2015},
+        {"ose_building_id": "2", "year_built": 1975, "neighborhood": "BALLARD", "__sort": 2018},
     ]
     out = {r["ose_building_id"]: r for r in _dedupe_latest_non_null(rows, "ose_building_id")}
     assert set(out) == {"1", "2"}
     assert out["1"]["year_built"] == 1990  # newer row's value was null -> keep older
     assert out["1"]["neighborhood"] == "DOWNTOWN"  # newer non-null wins
-    assert "__year" not in out["1"]
+    assert "__sort" not in out["1"]
 
 
 def test_dedupe_by_key_last_wins_drops_null_keys():

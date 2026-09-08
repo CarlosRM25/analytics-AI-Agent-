@@ -1,16 +1,17 @@
 """Generic Socrata SODA ingestion, driven by a SourceSpec (architecture doc 4.2).
 
     python -m ingest.run --source seattle_energy [--full-refresh] [--since 2015] [--limit N]
+    python -m ingest.run --source seattle_crime  --since 2024        (a slice of a 1.5M-row set)
 
 Steps: resolve the spec from ``sources.REGISTRY``; page the SODA endpoint with
 ``$limit``/``$offset``; map each record onto one dict per target table via
-``field_map`` (string -> typed by ``FieldMap.dtype``); upsert parents before
-children on the spec's upsert keys; refresh the ``datasets`` row; write one
-``ingestion_runs`` audit row.
+``field_map`` (string -> typed by ``FieldMap.dtype``); upsert the slowly-changing
+dimension (``spec.static_table``, if any) then the fact table on the spec's
+upsert keys; refresh the ``datasets`` row; write one ``ingestion_runs`` audit row.
 
-Not a poller — the source refreshes annually. A normal run re-upserts every row
-(idempotent); ``--full-refresh`` also deletes existing rows first, dropping any
-that vanished upstream; ``--since YEAR`` limits the pull.
+Everything source-specific lives on the ``SourceSpec`` (``time_column``,
+``static_table``, ``year_column``, ``null_tokens``, ...). ``--full-refresh``
+deletes existing rows first; ``--since YEAR`` filters on ``spec.time_column``.
 """
 
 from __future__ import annotations
@@ -36,13 +37,15 @@ _CHUNK = 500
 # --------------------------------------------------------------------------- #
 # value coercion
 # --------------------------------------------------------------------------- #
-def _coerce(value: object, dtype: str) -> object | None:
+def _coerce(value: object, dtype: str, null_tokens: tuple[str, ...] = ()) -> object | None:
     """Socrata sends every field as a JSON string (except real bools). Map to a
-    Python value by ``dtype``; empty string and the literal ``"NA"`` -> None."""
+    Python value by ``dtype``. ``""`` and ``"NA"`` (plus any ``null_tokens`` the
+    source declares, e.g. ``"-"`` / ``"REDACTED"``) -> None. ``dtype="year"``
+    takes the leading 4 digits of a date/datetime string."""
     if value is None:
         return None
     v = value.strip() if isinstance(value, str) else value
-    if isinstance(v, str) and (v == "" or v.upper() == "NA"):
+    if isinstance(v, str) and (v == "" or v.upper() == "NA" or v in null_tokens):
         return None
     try:
         if dtype == "str":
@@ -51,6 +54,8 @@ def _coerce(value: object, dtype: str) -> object | None:
             return int(round(float(v)))
         if dtype == "float":
             return float(v)
+        if dtype == "year":
+            return int(str(v)[:4])
         if dtype == "bool":
             if isinstance(v, bool):
                 return int(v)
@@ -76,7 +81,8 @@ def _fetch_all(spec: SourceSpec, since: int | None, limit: int | None) -> list[d
             "$order": ":id",
         }
         if since is not None:
-            params["$where"] = f"datayear >= '{since}'"
+            floor = f"{since}-01-01" if spec.time_is_datetime else str(since)
+            params["$where"] = f"{spec.time_column} >= '{floor}'"
         resp = requests.get(url, params=params, headers=headers, timeout=_SODA_TIMEOUT)
         if resp.status_code == 403 and headers:
             # A stale / wrong app token 403s where anonymous would 200. Anonymous
@@ -107,38 +113,39 @@ def _stage(spec: SourceSpec, raw_rows: list[dict]) -> dict[str, list[dict]]:
     for rec in raw_rows:
         per_table: dict[str, dict] = {t: {} for t in spec.target_tables}
         for src_col, fm in targets:
-            val = _coerce(rec.get(src_col), fm.dtype)
+            val = _coerce(rec.get(src_col), fm.dtype, spec.null_tokens)
             if fm.transform is not None:
                 val = fm.transform(val)
             per_table[fm.table][fm.column] = val
-        if "buildings" in per_table and "energy_records" in per_table:
-            per_table["buildings"]["__year"] = per_table["energy_records"].get("data_year")
+        if spec.static_table:
+            per_table[spec.static_table]["__sort"] = _coerce(rec.get(spec.static_sort_key), "int")
         for t in spec.target_tables:
             staged[t].append(per_table[t])
 
-    if "buildings" in staged:
-        (bkey,) = spec.upsert_keys["buildings"]
-        staged["buildings"] = _dedupe_latest_non_null(staged["buildings"], bkey)
     for t in spec.target_tables:
-        if t != "buildings":
+        if t == spec.static_table:
+            (key,) = spec.upsert_keys[t]
+            staged[t] = _dedupe_latest_non_null(staged[t], key)
+        else:
             staged[t] = _dedupe_by_key(staged[t], spec.upsert_keys[t])
     return staged
 
 
 def _dedupe_latest_non_null(rows: list[dict], key: str) -> list[dict]:
-    """One row per ``key``. Walk oldest -> newest by ``__year``; later non-null
-    values win, so each attribute reflects the most recent year that reported it."""
+    """One row per ``key`` for a slowly-changing dimension. Walk oldest -> newest
+    by ``__sort``; later non-null values win, so each attribute reflects the most
+    recent source row that reported it."""
     merged: dict[object, dict] = {}
-    for row in sorted(rows, key=lambda r: r.get("__year") or 0):
+    for row in sorted(rows, key=lambda r: r.get("__sort") or 0):
         ident = row.get(key)
         if ident is None:
             continue
         target = merged.get(ident)
         if target is None:
-            merged[ident] = {c: v for c, v in row.items() if c != "__year"}
+            merged[ident] = {c: v for c, v in row.items() if c != "__sort"}
         else:
             for col, val in row.items():
-                if col != "__year" and val is not None:
+                if col != "__sort" and val is not None:
                     target[col] = val
     return list(merged.values())
 
@@ -216,8 +223,9 @@ def _catalog_dataset(spec: SourceSpec) -> dict:
 
 def _refresh_dataset(conn, spec: SourceSpec, meta: MetaData) -> None:
     ds = _catalog_dataset(spec)
+    yc = spec.year_column
     row = conn.execute(
-        text("SELECT COUNT(*) AS n, MIN(data_year) AS lo, MAX(data_year) AS hi FROM energy_records")
+        text(f"SELECT COUNT(*) AS n, MIN({yc}) AS lo, MAX({yc}) AS hi FROM {spec.fact_table}")
     ).one()
     values = {
         "dataset_key": spec.key,
@@ -250,7 +258,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="delete existing rows for this source before loading",
     )
-    parser.add_argument("--since", type=int, metavar="YEAR", help="only pull data_year >= YEAR")
+    parser.add_argument(
+        "--since",
+        type=int,
+        metavar="YEAR",
+        help="only pull rows from YEAR onward (spec.time_column)",
+    )
     parser.add_argument("--limit", type=int, metavar="N", help="stop after N source rows (debug)")
     args = parser.parse_args(argv)
 

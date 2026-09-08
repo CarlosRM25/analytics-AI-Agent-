@@ -77,6 +77,32 @@ def test_system_prompt_has_schema_and_cache_breakpoint():
     assert "Compliant" in body  # enum surfaced
 
 
+# --- M9: a second source drops in with no agent change --------------------- #
+def test_tool_schemas_and_prompt_for_seattle_crime():
+    names = [t["name"] for t in tools.tool_schemas("seattle_crime")]
+    assert "run_sql" in names and "make_chart" in names
+    assert "predict" not in names  # seattle_crime has no model_module
+
+    body = prompts.build_system_prompt("seattle_crime")[0]["text"]
+    assert "crime_incidents" in body and "NIBRS" in body
+    assert "VIOLENT CRIME" in body  # an enum from the crime catalog
+
+
+def test_describe_schema_and_run_sql_against_crime(loaded_crime_db):
+    payload, is_error = tools.run_tool("describe_schema", {"dataset_key": "seattle_crime"})
+    data = json.loads(payload)
+    assert not is_error
+    (tbl,) = data["tables"]
+    assert tbl["table"] == "crime_incidents" and tbl["row_count"] == 3
+    cat_col = next(c for c in tbl["columns"] if c["name"] == "offense_category")
+    assert "VIOLENT CRIME" in cat_col["enum"]
+
+    out = tools.run_sql(
+        "SELECT precinct, COUNT(*) n FROM crime_incidents GROUP BY 1 ORDER BY n DESC"
+    )
+    assert out["rows"][0] == {"precinct": "North", "n": 2}
+
+
 # --- trace ----------------------------------------------------------------- #
 def test_trace_cost_and_summary():
     tr = trace.Trace(question="q", model="claude-haiku-4-5")

@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-#
 # Cloud Run image (architecture doc §10): Flask + the agent + a baked-in,
 # read-only SQLite snapshot. No database service, no writable disk.
 #

@@ -21,8 +21,12 @@ current; older milestone prose is kept for context._
   `COPY . .` bakes in the committed `analytics.db` + `model-*.joblib`, `gunicorn
   'app.api:create_app()'` on `$PORT`. `ENV DEPLOY_MODE=deployed
   ANALYST_MODEL=claude-haiku-4-5 MAX_AGENT_ITERS=6`. Build fails if the
-  data/model are missing. **Not built locally — no Docker in the dev env** —
-  but the deployed *code paths* are all exercised by tests + a deployed-mode run.
+  data/model are missing. **Built + run-verified** (Docker Desktop): `docker
+  build` clean (~90s), image ~188 MB; container serves `/health` and `/ask` —
+  descriptive (`run_sql` on the `mode=ro` DB), predictive (`predict` loading the
+  baked joblib under sklearn 1.9), and chart (`data:text/html` URI); gunicorn
+  boots as `appuser`, env `DEPLOY_MODE=deployed`. (The `# syntax=` directive was
+  dropped — it forced a Hub pull that needs a credential helper not on PATH.)
 - ✅ `.dockerignore` (drops `.env`, tests, notebooks, evals, `.venv`),
   `deploy/cloudrun.yaml` (Knative Service — `minScale: 0`, 512Mi/1cpu,
   `ANTHROPIC_API_KEY` from Secret Manager, `gcloud run services replace`).
@@ -267,7 +271,7 @@ MySQL design — §8.8 anticipated the swap.)*
 | **M4** | Agent loop | ✅ `agent/` — `list_datasets`/`describe_schema`/`run_sql` (guardrails, `ro_engine`); hand loop with `MAX_ITERS`; `trace.py` → `runs.jsonl`; live-verified on Haiku, self-correcting SQL |
 | **M5** | `predict` + `make_chart` | ✅ both tools; `predict` gated on `model_module`, `make_chart` charts `data="last_query"` via `RunContext`; live-verified — agent picks the right tool per question |
 | **M6** | Interface + evals | ✅ `app/cli.py` (`analyst ask`) + `app/api.py` (`POST /ask` · `GET /health`); `evals/questions.yaml` (15) + `run.py` reporting pass rate / iterations / tokens / $-per-q / cache-hit-rate; prompt caching now engages (schema folded into the system prompt) — 15/15, ~$0.004/q on Haiku |
-| **M7** | Containerize + deploy | ✅ `deploy/Dockerfile` (`python:3.11-slim` + gunicorn + `deploy/requirements.txt`) · `.dockerignore` · `deploy/cloudrun.yaml`; `analytics.db` + `model-*.joblib` committed and baked in; `ro_engine` `mode=ro` on `deployed`; `make_chart` returns a `data:text/html` URI on `deployed`; `_REQUIRED["deployed"]` = just the API key. Live-verified in deployed mode (`/health`, a chart `/ask`, eval subset 3/3). Not `docker build`-tested — no Docker in the dev env. |
+| **M7** | Containerize + deploy | ✅ `deploy/Dockerfile` (`python:3.11-slim` + gunicorn + `deploy/requirements.txt`) · `.dockerignore` · `deploy/cloudrun.yaml`; `analytics.db` + `model-*.joblib` committed and baked in; `ro_engine` `mode=ro` on `deployed`; `make_chart` returns a `data:text/html` URI on `deployed`; `_REQUIRED["deployed"]` = just the API key. **`docker build` + run verified**: container serves `/health` + `/ask` (descriptive / predict / chart), gunicorn as `appuser`. |
 | M8 | Public-demo hardening | `frontend/` offline gallery live; rate limits + response cache (Redis); `DEMO_ENABLED` + budget cutoff; CORS locked; alerts |
 | M9 | Expansion (stretch) | *either* a second `SourceSpec` (SPD crime `tazs-3rd5`, or Metro transit) *or* the `permits` join — not both |
 

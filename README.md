@@ -141,6 +141,6 @@ analytics-agent/
 | **M4** | Agent loop | ✅ `agent/` — 3 tools + guardrails, hand loop, `trace.py`; `python -m agent.loop "question"`; live-verified, self-correcting SQL |
 | **M5** | `predict` + `make_chart` | ✅ `predict` (M3 model, gated on `model_module`) + `make_chart` (Plotly, charts `data="last_query"`); agent picks the right tool per question |
 | **M6** | Interface + evals | ✅ `app/cli.py` + `app/api.py` (`POST /ask`, `GET /health`); `evals/` — 15 questions, grades pass rate / iterations / $-per-q; prompt caching engaged (~$0.004/q on Haiku) |
-| **M7** | Containerize + deploy | ✅ `deploy/Dockerfile` (slim + gunicorn) + `.dockerignore` + `cloudrun.yaml`; `analytics.db` + model committed and baked in; `mode=ro` DB + inline `data:` charts on `DEPLOY_MODE=deployed`; verified in deployed mode (not `docker build`-tested — no Docker in the dev env) |
+| **M7** | Containerize + deploy | ✅ `deploy/Dockerfile` (slim + gunicorn) + `.dockerignore` + `cloudrun.yaml`; `analytics.db` + model committed and baked in; `mode=ro` DB + inline `data:` charts on `DEPLOY_MODE=deployed`; `docker build` + container run verified (`/health`, `/ask`) |
 | M8 | Public-demo hardening | offline gallery, rate limits, response cache, spend caps |
 | M9 | Expansion (stretch) | a second `SourceSpec`, or the permits join |

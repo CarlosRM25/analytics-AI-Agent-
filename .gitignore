@@ -18,6 +18,9 @@ logs/*
 !logs/.gitkeep
 outputs/charts/*
 !outputs/charts/.gitkeep
+# eval runs are noisy; one reference run is committed with `git add -f`
+evals/results/*
+!evals/results/.gitkeep
 model/seattle_energy/artifacts/*
 !model/seattle_energy/artifacts/.gitkeep
 # commit the metrics + importance plot, not the model binary

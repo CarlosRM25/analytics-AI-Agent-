@@ -1,6 +1,7 @@
 """Shared fixtures."""
 
 import pytest
+from sqlalchemy import text
 
 import config
 from db import engine
@@ -36,3 +37,34 @@ def sqlite_env(tmp_path, monkeypatch):
     _clear_caches()
     yield db_file
     _clear_caches()
+
+
+@pytest.fixture
+def loaded_db(sqlite_env):
+    """Migrated temp DB with a handful of rows the agent tools can query."""
+    from db import migrate
+    from db.engine import rw_engine
+
+    migrate.main()
+    with rw_engine().begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO datasets (dataset_key, title, description, row_count) "
+                "VALUES ('seattle_energy', 'Seattle Energy', 'test rows', 5)"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO buildings (ose_building_id, primary_property_type) "
+                "VALUES ('b1', 'Office')"
+            )
+        )
+        for year, eui in enumerate([10, 20, 30, 40, 50], start=2019):
+            conn.execute(
+                text(
+                    "INSERT INTO energy_records (ose_building_id, data_year, site_eui) "
+                    "VALUES ('b1', :y, :e)"
+                ),
+                {"y": year, "e": eui},
+            )
+    return sqlite_env

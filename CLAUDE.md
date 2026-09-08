@@ -11,10 +11,47 @@ boundary, but nothing here depends on the other projects.
 
 ## Status
 
-_M1–M4 merged to `main`. M5 (`m5-tools`) is an open PR. Some prose below predates
-the merges; the milestone table is current._
+_M1–M5 merged to `main`. M6 (`m6-interface`) is an open PR. The milestone table
+is current; older milestone prose is kept for context._
 
-**M5 — `predict` + `make_chart`, complete** (branch `m5-tools`, PR open).
+**M6 — interface + evals, complete** (branch `m6-interface`, PR open).
+
+- ✅ `app/cli.py` — `click` group. `python -m app.cli ask "…"` prints the answer,
+  the SQL, chart paths, and the one-line trace summary; `--json` dumps the full
+  `AnswerResult`. Thin wrapper over `agent.loop.answer_question` — same boundary
+  the API and the eval harness use.
+- ✅ `app/api.py` — Flask app factory. `POST /ask {question, source?}` →
+  `{answer, steps:[{tool, sql?, chart_url?}], usage:{tokens,cost_usd,latency_ms},
+  stopped}`; `GET /health` → `{"status":"ok"}`. `DEMO_ENABLED=false` short-circuits
+  `/ask` to `{"disabled":true}` (§10 kill switch); errors are logged server-side
+  and returned generic (no stack traces to the client). CORS is still M8.
+- ✅ `evals/questions.yaml` — 15 items (descriptive / predictive / chart),
+  ground-truthed against the local DB. `evals/run.py` runs the agent over them,
+  grades with plain assertions (`tools_used` / `tables_touched` / `answer_contains`
+  / `answer_contains_any` / `numeric{value,tol}` / `chart` / `max_iters`), and
+  writes `results/run-<ts>.{json,md}` — pass rate, avg iterations, avg tokens,
+  **$/question**, prompt-cache hit rate, and every failure with its SQL. Optional
+  `--judge` adds an advisory Haiku LLM-grader. `--dry-run` / `--only` / `--limit`
+  / `--model`. It hits the real API → lives outside `tests/`.
+- ✅ **Prompt caching now engages.** The M4 note (prefix under the cache floor)
+  was worse than thought: `claude-haiku-4-5` doesn't cache a ~4.2k-token prefix
+  but does cache ~4.5k+ (floor ≈ 4,096; Opus/Sonnet are 1,024). `agent/prompts.py`
+  folds the full schema + M1/M2/M3 facts + worked SQL examples + an exact
+  column-value cheat sheet into the one cached system block (now ~4.8k tokens with
+  tools). Result on the 15-q eval: **$0.011/q → $0.004/q** (~60% cheaper) and the
+  agent stopped calling `describe_schema` (avg ~2.2 iterations). `trace.py` now
+  also tracks `cache_creation_tokens`.
+- ✅ Live-verified: full 15-q eval **15/15**, ~$0.06, ~2 min on Haiku; `q06`
+  self-corrected the row-count-vs-`COUNT(DISTINCT)` trap; CLI + Flask smoke-tested
+  end to end.
+- ✅ `tests/` — `test_app.py` (CLI + Flask via the fake client, 10) and
+  `test_evals.py` (grader + `questions.yaml` shape + report render + `--dry-run`,
+  7). `conftest.py` grew a shared `loaded_db` fixture (moved out of
+  `test_agent.py`). **77 tests green.**
+- ⚠️ Still open (M7): `model-*.joblib` is gitignored, so a fresh clone can't
+  `predict` — commit it or retrain in the Docker build.
+
+**M5 — `predict` + `make_chart`, complete** (merged).
 
 - ✅ `agent/tools.py` — `predict` (loads latest `model-*.joblib`, rejects unknown
   feature keys, coerces numerics / builds the `category`-dtype frame, returns
@@ -191,7 +228,7 @@ MySQL design — §8.8 anticipated the swap.)*
 | **M3** | Baseline model | ✅ `features.py` + `train.py`; HGB + LogReg baseline; temporal **and** building-disjoint splits; metrics/importance artifacts; `model_card.md` (`m3-model`) |
 | **M4** | Agent loop | ✅ `agent/` — `list_datasets`/`describe_schema`/`run_sql` (guardrails, `ro_engine`); hand loop with `MAX_ITERS`; `trace.py` → `runs.jsonl`; live-verified on Haiku, self-correcting SQL |
 | **M5** | `predict` + `make_chart` | ✅ both tools; `predict` gated on `model_module`, `make_chart` charts `data="last_query"` via `RunContext`; live-verified — agent picks the right tool per question |
-| M6 | Interface + evals | `cli.py`, `POST /ask`; `evals/questions.yaml` (12-15) + `run.py` reporting pass rate / iterations / cost |
+| **M6** | Interface + evals | ✅ `app/cli.py` (`analyst ask`) + `app/api.py` (`POST /ask` · `GET /health`); `evals/questions.yaml` (15) + `run.py` reporting pass rate / iterations / tokens / $-per-q / cache-hit-rate; prompt caching now engages (schema folded into the system prompt) — 15/15, ~$0.004/q on Haiku |
 | M7 | Containerize + deploy | `deploy/Dockerfile` (Flask + agent + SQLite `mode=ro`); Cloud Run; `/ask` + `/health`; `claude-haiku-4-5`; charts inline |
 | M8 | Public-demo hardening | `frontend/` offline gallery live; rate limits + response cache (Redis); `DEMO_ENABLED` + budget cutoff; CORS locked; alerts |
 | M9 | Expansion (stretch) | *either* a second `SourceSpec` (SPD crime `tazs-3rd5`, or Metro transit) *or* the `permits` join — not both |

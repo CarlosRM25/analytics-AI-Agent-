@@ -53,24 +53,28 @@ class Trace:
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
     cost_usd: float = 0.0
     model_turns: int = 0
 
     def record_response(self, resp) -> None:
         self.model_turns += 1
         u = resp.usage
-        self.input_tokens += (getattr(u, "input_tokens", 0) or 0) + (
-            getattr(u, "cache_read_input_tokens", 0) or 0
-        )
+        fresh = getattr(u, "input_tokens", 0) or 0
+        cache_read = getattr(u, "cache_read_input_tokens", 0) or 0
+        cache_write = getattr(u, "cache_creation_input_tokens", 0) or 0
+        self.input_tokens += fresh + cache_read + cache_write
         self.output_tokens += getattr(u, "output_tokens", 0) or 0
-        self.cache_read_tokens += getattr(u, "cache_read_input_tokens", 0) or 0
+        self.cache_read_tokens += cache_read
+        self.cache_creation_tokens += cache_write
         self.cost_usd += _price(self.model, u)
         self.steps.append(
             {
                 "kind": "model",
                 "stop_reason": resp.stop_reason,
                 "output_tokens": getattr(u, "output_tokens", 0) or 0,
-                "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0,
+                "cache_read": cache_read,
+                "cache_write": cache_write,
             }
         )
 
@@ -108,6 +112,7 @@ class Trace:
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "cache_read_tokens": self.cache_read_tokens,
+            "cache_creation_tokens": self.cache_creation_tokens,
             "cost_usd": round(self.cost_usd, 6),
             "latency_ms": self.latency_ms(),
         }

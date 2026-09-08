@@ -1,12 +1,162 @@
-# Versioned evaluation question set (milestone M6). 12-15 items.
+# Versioned evaluation question set (architecture doc §4.7).
 #
-# Each item:
+# Ground truth is the local analytics.db (M1 load: 38,309 records / 3,871
+# buildings / 2015-2025). run.py runs the agent over every item, grades with the
+# assertions below, and reports pass rate / iterations / tokens / $ per question.
+# It hits the real API and costs money, so it lives outside tests/.
+#
+# Item shape:
 #   - id: q01
-#     question: "Which property types have the worst emissions intensity?"
-#     expects:
-#       tables_touched: [energy_records, buildings]   # optional
-#       answer_contains: ["office"]                    # optional
-#       numeric: { value: 12.3, tol: 0.5 }            # optional
-#     notes: "..."
+#     kind: descriptive | predictive | chart      # for the report breakdown
+#     question: "..."
+#     expects:                                    # every listed check must pass
+#       tools_used: [run_sql]                     # each must appear in the trace
+#       tables_touched: [energy_records, buildings]  # each a substring of some run_sql
+#       answer_contains: ["office"]               # all (case-insensitive)
+#       answer_contains_any: ["yes", "more efficient"]  # at least one
+#       numeric: { value: 3871, tol: 75 }         # some number in the answer within tol
+#       chart: true                               # make_chart produced a chart
+#       max_iters: 4                              # model_turns ceiling (cost guard)
+#     notes: "why this question / what it exercises"
 
-# TODO(M6): write 12-15 questions spanning descriptive, predictive, and "show me".
+- id: q01
+  kind: descriptive
+  question: "How many distinct buildings are in the benchmarking dataset?"
+  expects:
+    tools_used: [run_sql]
+    numeric: { value: 3871, tol: 75 }
+  notes: "Simplest count. buildings has 3,871 rows."
+
+- id: q02
+  kind: descriptive
+  question: "What range of years does the energy data cover?"
+  expects:
+    answer_contains: ["2015", "2025"]
+  notes: "data_year spans 2015-2025. Should be answerable from the prompt in one turn."
+
+- id: q03
+  kind: descriptive
+  question: "What percentage of annual filings are marked compliant?"
+  expects:
+    tools_used: [run_sql]
+    answer_contains_any: ["93", "94%"]
+  notes: "35,796 / 38,309 = 93.4% Compliant."
+
+- id: q04
+  kind: descriptive
+  question: "What is the most common primary property type by building count?"
+  expects:
+    tools_used: [run_sql]
+    answer_contains: ["multifamily"]
+  notes: "Multifamily Housing, ~1,970 buildings — next is Office at ~500."
+
+- id: q05
+  kind: descriptive
+  question: "Which neighborhood has the most benchmarked buildings?"
+  expects:
+    tools_used: [run_sql]
+    answer_contains: ["east"]
+  notes: "EAST (576), then LAKE UNION (487)."
+
+- id: q06
+  kind: descriptive
+  question: "How many distinct buildings have ever been flagged as demolished in the data?"
+  expects:
+    tools_used: [run_sql]
+    tables_touched: [energy_records]
+    numeric: { value: 75, tol: 12 }
+  notes: >
+    Trap: demolished is a per-year flag on energy_records. COUNT(*) WHERE
+    demolished=1 gives 329 rows; COUNT(DISTINCT ose_building_id) gives the right
+    answer, 75.
+
+- id: q07
+  kind: descriptive
+  question: "In 2023, what was the median GHG emissions intensity for hotels?"
+  expects:
+    tools_used: [run_sql]
+    tables_touched: [energy_records, buildings]
+    numeric: { value: 1.75, tol: 0.6 }
+  notes: "Exercises the registered median() aggregate + a type filter. ~1.75 kg CO2e/sf, n=78."
+
+- id: q08
+  kind: descriptive
+  question: >
+    In 2023, which property types had the highest median GHG emissions intensity
+    per square foot? Only consider types with at least 20 buildings.
+  expects:
+    tools_used: [run_sql]
+    tables_touched: [energy_records, buildings]
+    answer_contains_any: ["supermarket", "grocery", "laborator"]
+  notes: "Supermarket/Grocery (5.2) and Laboratory (5.0) are far above the rest."
+
+- id: q09
+  kind: descriptive
+  question: >
+    Have office buildings gotten more energy efficient since 2018? Use the
+    weather-normalized site EUI.
+  expects:
+    tools_used: [run_sql]
+    tables_touched: [energy_records, buildings]
+    answer_contains_any: ["more efficient", "decreas", "declin", "lower", "down", "improved", "yes"]
+  notes: "Office avg site_eui_wn 58.4 (2018) -> 46.6 (2024): clearly down."
+
+- id: q10
+  kind: descriptive
+  question: >
+    Citywide, did total reported GHG emissions go up or down between 2015 and
+    2024?
+  expects:
+    tools_used: [run_sql]
+    tables_touched: [energy_records]
+    answer_contains_any: ["up", "increas", "higher", "grew", "rose", "tripl"]
+  notes: >
+    336k -> 1,007k metric tons: up ~3x. A strong answer also flags that reporting
+    coverage and methodology changed over the window; grading only checks the
+    direction.
+
+- id: q11
+  kind: descriptive
+  question: "What is the median ENERGY STAR score for Multifamily Housing buildings in 2023?"
+  expects:
+    tools_used: [run_sql]
+    tables_touched: [energy_records, buildings]
+    numeric: { value: 88, tol: 8 }
+  notes: "median(energy_star_score) for Multifamily Housing, 2023 = 88 (n=1,593 scored)."
+
+- id: q12
+  kind: chart
+  question: "Show me how the number of buildings reporting each year has changed. Include a chart."
+  expects:
+    tools_used: [run_sql, make_chart]
+    chart: true
+  notes: "run_sql for the per-year counts, then make_chart(line/bar, data='last_query')."
+
+- id: q13
+  kind: chart
+  question: "Chart the average weather-normalized site EUI for office buildings by year."
+  expects:
+    tools_used: [run_sql, make_chart]
+    tables_touched: [energy_records, buildings]
+    chart: true
+  notes: "Descriptive trend that IS the answer -> should end in a chart."
+
+- id: q14
+  kind: predictive
+  question: >
+    What would the model expect for a 40-year-old office building of about
+    200,000 square feet with no ENERGY STAR score?
+  expects:
+    tools_used: [predict]
+    answer_contains_any: ["probab", "%", "likely", "model expects", "high emitter", "not a high emitter"]
+  notes: "Must pick predict, not run_sql. building_age~40, log_gfa_total~5.3, primary_property_type=Office, has_energy_star=0."
+
+- id: q15
+  kind: predictive
+  question: >
+    Does the model think a brand-new 5-story Multifamily Housing building with an
+    ENERGY STAR score of 90 would be a high emitter?
+  expects:
+    tools_used: [predict]
+    answer_contains_any: ["probab", "%", "no", "low", "unlikely", "not a high emitter"]
+  notes: "predict with building_age~0, number_of_floors=5, energy_star_score=90, has_energy_star=1."

@@ -47,8 +47,16 @@ Rules:
   ROW_NUMBER() window.
 - A column that is NULL where unreported is not 0 — filter it, don't sum it as 0.
 - If a tool returns an error_type/message, read it and fix the call.
-- When you have enough to answer, stop calling tools and reply. State the
-  finding, the key numbers, the SQL you ran, and any chart path.
+
+Answering (the interface shows your query and renders your chart already):
+- When you have enough, stop calling tools and reply. Lead with the finding in
+  one or two sentences — no "Answer:" / "Summary:" heading, the interface
+  already labels it — then the supporting numbers as a short list or small
+  table, then any caveat that actually matters.
+- Never paste a chart file path, URL or data: URI, and don't restate the SQL in
+  prose. Both are displayed next to your answer.
+- Each question is answered on its own with no conversation history. Don't offer
+  follow-ups ("would you like me to…") or refer back to an earlier question.
 """
 
 _SECTIONS = ("facts", "examples", "values", "rules")

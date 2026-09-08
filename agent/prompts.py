@@ -32,10 +32,12 @@ Tools:
 Rules:
 - List columns explicitly; do not SELECT *. Prefer weather-normalised columns
   (site_eui_wn) for year-over-year comparisons.
-- SQLite has no MEDIAN / PERCENTILE_CONT. For a median: a CTE with
-  ROW_NUMBER() OVER (PARTITION BY grp ORDER BY val) and COUNT(*) OVER
-  (PARTITION BY grp), then keep the middle row(s). AVG is a fine approximation
-  when the question is not specifically about the median.
+- buildings holds only static attributes; every per-year column — energy,
+  emissions, compliance_status, demolished — is on energy_records.
+- Aggregates: AVG, plus registered median(x), mode(x), mean(x) — use them
+  directly, e.g. SELECT primary_property_type, median(ghg_emissions_intensity)
+  ... GROUP BY 1. For other percentiles (SQLite has no PERCENTILE_CONT) use a
+  ROW_NUMBER() window.
 - energy_star_score is NULL for property types EPA does not score; filter it,
   never treat NULL as 0.
 - If a tool returns an error_type/message, read it and fix the call.

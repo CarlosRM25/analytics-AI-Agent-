@@ -31,8 +31,12 @@ the merges; the milestone table is current._
 - **Live-verified on Haiku:** the predictive question ("what would the model
   expect for a 1965 office…") → `predict` → 0.80 proba, surfaced the caveat; the
   chart question → `run_sql` then `make_chart` with `data="last_query"` → wrote
-  the HTML and returned its path. Median questions still take ~3 SQL retries
-  (SQLite has no `MEDIAN()`; prompt hint added, Haiku still fiddles it).
+  the HTML and returned its path.
+- ✅ `db/engine.py` now **registers `median(x)` / `mean(x)` / `mode(x)`** SQLite
+  aggregates on both engines (SQLite ships none but `avg`) — the median question
+  dropped from ~6 turns / $0.04 to ~3 / $0.013. `agent/loop.py` CLI made
+  UTF-8-safe (answers contain `CO₂e`). Prompt hints: the registered aggregates,
+  and "every per-year column incl. `demolished` is on `energy_records`".
 - ⚠️ **`model-*.joblib` is gitignored** — `predict` works locally but a fresh
   clone / CI has no model (tests use a toy model). **Decision deferred to M7:**
   commit the joblib, or `train.py` in the Docker build.

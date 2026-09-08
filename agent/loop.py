@@ -11,6 +11,7 @@ current models — output is shaped by the system prompt).
 
 from __future__ import annotations
 
+import contextlib
 import sys
 import time
 from dataclasses import dataclass, field
@@ -145,6 +146,9 @@ def answer_question(question: str, *, source: str = "seattle_energy") -> AnswerR
 
 
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        with contextlib.suppress(AttributeError, ValueError):
+            stream.reconfigure(encoding="utf-8", errors="replace")  # answers contain CO₂e, — etc.
     args = argv if argv is not None else sys.argv[1:]
     if not args:
         print('usage: python -m agent.loop "your question"', file=sys.stderr)

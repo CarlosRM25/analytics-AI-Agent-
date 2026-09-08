@@ -15,8 +15,10 @@ dataset:
     per calendar year. ~38k rows, ~3,900 buildings, data years 2015-2025.
   source_url: https://data.seattle.gov/resource/teqw-tu6e
   dialect_note: >
-    SQLite everywhere (local and the deployed demo). Standard SQL; SQLite has
-    window functions and CTEs. The agent connects read-only (PRAGMA query_only).
+    SQLite everywhere (local and the deployed demo). Window functions and CTEs
+    are available, plus registered aggregates median(x), mode(x), mean(x)
+    alongside the built-in avg(x). The agent connects read-only (PRAGMA
+    query_only).
 
 tables:
 

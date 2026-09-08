@@ -39,3 +39,4 @@ redis               # M8: rate-limit + response cache
 # --- tooling ---
 ruff
 pytest
+fakeredis           # in-memory Redis for the M8 middleware tests

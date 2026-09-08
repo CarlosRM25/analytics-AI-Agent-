@@ -21,15 +21,30 @@ from typing import Literal
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
+def _strip_inline_comment_values(data: dict) -> dict:
+    """pydantic-settings does not strip trailing ``# ...`` comments from ``.env``
+    values (python-dotenv does). A field left "blank but commented" in
+    ``.env.example`` therefore arrives as the comment text. Treat any value that
+    is only / starts with a ``#`` comment as unset."""
+    out = {}
+    for k, v in data.items():
+        if isinstance(v, str) and v.lstrip().startswith("#"):
+            out[k] = ""
+        else:
+            out[k] = v
+    return out
+
+
 # Local dev covers ingestion, EDA, and model work as well as the agent, and
 # SQLite needs no credentials — so nothing is strictly required locally. The
-# deployed service (M7: Flask + agent + a baked-in read-only SQLite snapshot on
-# Cloud Run) only needs the API key to boot. REDIS_URL and CORS_ALLOWED_ORIGIN
-# are checked by the M8 rate-limit / CORS middleware at its point of use, not
-# here — M7 deploys without them.
+# deployed public demo needs the API key plus, since M8, the Redis URL that
+# backs the rate limiter / response cache / budget counter and the portfolio
+# origin that CORS is locked to. (M7's image booted without the last two; M8
+# adds the middleware that uses them.)
 _REQUIRED: dict[str, tuple[str, ...]] = {
     "local": (),
-    "deployed": ("ANTHROPIC_API_KEY",),
+    "deployed": ("ANTHROPIC_API_KEY", "REDIS_URL", "CORS_ALLOWED_ORIGIN"),
 }
 
 
@@ -57,10 +72,16 @@ class Settings(BaseSettings):
     GLOBAL_DAILY_QUESTION_CAP: int = 300
     MONTHLY_BUDGET_USD: float = 15.0
     RESPONSE_CACHE_TTL_DAYS: int = 30
-    REDIS_URL: str | None = None  # Upstash — rate-limit counters + response cache
-    TURNSTILE_SECRET: str | None = None  # blank = disabled
+    REDIS_URL: str | None = None  # Upstash — rate-limit counters + response cache + budget
+    RATE_LIMIT_SALT: str = "analytics-agent"  # salts the hashed visitor IP
+    TURNSTILE_SECRET: str | None = None  # blank = disabled (Cloudflare Turnstile on /ask)
     CORS_ALLOWED_ORIGIN: str | None = None
     ALERT_EMAIL: str | None = None  # uptime + budget alerts
+
+    @model_validator(mode="before")
+    @classmethod
+    def _scrub_comment_values(cls, data):
+        return _strip_inline_comment_values(data) if isinstance(data, dict) else data
 
     @model_validator(mode="after")
     def _require_mode_subset(self) -> Settings:

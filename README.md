@@ -12,20 +12,19 @@ Public civic data (Seattle Building Energy Benchmarking, via the Socrata SODA
 API) → config-driven ingestion → SQLite → a pandas/scikit-learn model → a
 hand-written tool-use loop on the Claude API → a thin CLI / Flask interface.
 
-> **Status: M7 — containerized for Cloud Run.** M1 loads 38,309 rows to SQLite;
-> M2 settles the target + features; M3 trains the `is_high_emitter` classifier
-> (temporal ROC-AUC 0.86, building-disjoint 0.76); **M4–M5 are a hand-written
-> tool-use loop on the Claude API** — `list_datasets` / `describe_schema` /
-> `run_sql` (guardrailed), `predict` (the M3 model), `make_chart` (Plotly).
-> **M6** adds a `click` CLI (`analyst ask`), a Flask `POST /ask` + `GET /health`,
-> and a 15-question eval harness (`evals/`) reporting pass rate / iterations /
-> **$ per question** (~$0.004/q on Haiku 4.5 with prompt caching, 15/15).
-> **M7** is the deploy image: `deploy/Dockerfile` (slim + gunicorn) bakes in a
-> read-only `analytics.db` + the model; on `DEPLOY_MODE=deployed` the DB opens
-> `mode=ro` and charts come back as inline `data:` URIs (no writable disk).
-> `ruff` + `pytest` green (84 tests). Next: M8 (public-demo hardening — offline
-> gallery, rate limits, response cache). Full design:
-> `analytics-agent-architecture.md`.
+> **Status: M8 — public-demo hardening (built, not yet deployed).** M1 loads
+> 38,309 rows to SQLite; M2 settles the target + features; M3 trains the
+> `is_high_emitter` classifier (temporal ROC-AUC 0.86, building-disjoint 0.76);
+> **M4–M5 are a hand-written tool-use loop on the Claude API** — `list_datasets`
+> / `describe_schema` / `run_sql` (guardrailed), `predict` (the M3 model),
+> `make_chart` (Plotly). **M6** adds a `click` CLI and a 15-question eval harness
+> (~$0.004/q on Haiku with prompt caching, 15/15). **M7** is the Cloud Run image
+> (slim + gunicorn, read-only baked-in DB, inline `data:` charts). **M8** wraps
+> `/ask` with a response cache, per-visitor + global rate limits, a monthly
+> budget cutoff, CORS lock, and an offline-first `frontend/` gallery — all inert
+> without `REDIS_URL`, verified against a real Redis. `ruff` + `pytest` green
+> (105 tests). Next: an actual Cloud Run deploy (needs a GCP project). Full
+> design: `analytics-agent-architecture.md`.
 
 ## System overview
 
@@ -142,5 +141,5 @@ analytics-agent/
 | **M5** | `predict` + `make_chart` | ✅ `predict` (M3 model, gated on `model_module`) + `make_chart` (Plotly, charts `data="last_query"`); agent picks the right tool per question |
 | **M6** | Interface + evals | ✅ `app/cli.py` + `app/api.py` (`POST /ask`, `GET /health`); `evals/` — 15 questions, grades pass rate / iterations / $-per-q; prompt caching engaged (~$0.004/q on Haiku) |
 | **M7** | Containerize + deploy | ✅ `deploy/Dockerfile` (slim + gunicorn) + `.dockerignore` + `cloudrun.yaml`; `analytics.db` + model committed and baked in; `mode=ro` DB + inline `data:` charts on `DEPLOY_MODE=deployed`; `docker build` + container run verified (`/health`, `/ask`) |
-| M8 | Public-demo hardening | offline gallery, rate limits, response cache, spend caps |
+| **M8** | Public-demo hardening | ✅ `/ask` middleware — response cache, per-visitor + global rate limits, monthly-budget cutoff, CORS lock, optional Turnstile (all inert without `REDIS_URL`); offline-first `frontend/` gallery + `examples.json`; `warm_cache.py` + `MONITORING.md`. Verified vs a real Redis; not yet deployed |
 | M9 | Expansion (stretch) | a second `SourceSpec`, or the permits join |

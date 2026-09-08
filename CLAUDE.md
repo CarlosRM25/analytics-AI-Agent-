@@ -11,10 +11,34 @@ boundary, but nothing here depends on the other projects.
 
 ## Status
 
-_M1–M3 merged to `main`. M4 (`m4-agent`) is an open PR. Some prose below predates
+_M1–M4 merged to `main`. M5 (`m5-tools`) is an open PR. Some prose below predates
 the merges; the milestone table is current._
 
-**M4 — agent loop, complete** (branch `m4-agent`, PR open).
+**M5 — `predict` + `make_chart`, complete** (branch `m5-tools`, PR open).
+
+- ✅ `agent/tools.py` — `predict` (loads latest `model-*.joblib`, rejects unknown
+  feature keys, coerces numerics / builds the `category`-dtype frame, returns
+  `is_high_emitter_proba` + the ROC-AUC-0.76 caveat) and `make_chart` (constrained
+  spec → Plotly → `outputs/charts/<run_id>-N.html`). `predict` + `make_chart` are
+  **not `strict`** (open feature dict / `anyOf` field — the API rejects those
+  under strict; handlers validate every field).
+- ✅ `RunContext` threads per-question state through `run_tool` — `run_sql`
+  stashes its result so `make_chart` can chart `data="last_query"`.
+- ✅ `tool_schemas(source_key)` — `predict` offered only when the source has a
+  `model_module` (seattle_energy does).
+- ✅ `conftest.py` — autouse `_isolate_source_registry` (every test starts with an
+  empty `sources.REGISTRY`; `tool_schemas` registers via `load()`).
+- **Live-verified on Haiku:** the predictive question ("what would the model
+  expect for a 1965 office…") → `predict` → 0.80 proba, surfaced the caveat; the
+  chart question → `run_sql` then `make_chart` with `data="last_query"` → wrote
+  the HTML and returned its path. Median questions still take ~3 SQL retries
+  (SQLite has no `MEDIAN()`; prompt hint added, Haiku still fiddles it).
+- ⚠️ **`model-*.joblib` is gitignored** — `predict` works locally but a fresh
+  clone / CI has no model (tests use a toy model). **Decision deferred to M7:**
+  commit the joblib, or `train.py` in the Docker build.
+- 56 tests green (10 new).
+
+**M4 — agent loop, complete** (merged).
 
 - ✅ `agent/catalog.py` — reads `catalog/<key>.yaml`; `summary_text()` for the
   system prompt.
@@ -162,7 +186,7 @@ MySQL design — §8.8 anticipated the swap.)*
 | **M2** | EDA notebook | ✅ `notebooks/01_eda.ipynb` — target balance, missingness, outlier rule, weak-signal finding, leakage check (`m2-eda`) |
 | **M3** | Baseline model | ✅ `features.py` + `train.py`; HGB + LogReg baseline; temporal **and** building-disjoint splits; metrics/importance artifacts; `model_card.md` (`m3-model`) |
 | **M4** | Agent loop | ✅ `agent/` — `list_datasets`/`describe_schema`/`run_sql` (guardrails, `ro_engine`); hand loop with `MAX_ITERS`; `trace.py` → `runs.jsonl`; live-verified on Haiku, self-correcting SQL |
-| M5 | `predict` + `make_chart` | both tools registered; agent picks the right one per question |
+| **M5** | `predict` + `make_chart` | ✅ both tools; `predict` gated on `model_module`, `make_chart` charts `data="last_query"` via `RunContext`; live-verified — agent picks the right tool per question |
 | M6 | Interface + evals | `cli.py`, `POST /ask`; `evals/questions.yaml` (12-15) + `run.py` reporting pass rate / iterations / cost |
 | M7 | Containerize + deploy | `deploy/Dockerfile` (Flask + agent + SQLite `mode=ro`); Cloud Run; `/ask` + `/health`; `claude-haiku-4-5`; charts inline |
 | M8 | Public-demo hardening | `frontend/` offline gallery live; rate limits + response cache (Redis); `DEMO_ENABLED` + budget cutoff; CORS locked; alerts |

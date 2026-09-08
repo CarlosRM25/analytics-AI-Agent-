@@ -68,6 +68,50 @@ def sqlite_env(tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def loaded_crime_db(sqlite_env):
+    """Migrated temp DB with a few crime_incidents rows + a datasets row (M9)."""
+    from db import migrate
+    from db.engine import rw_engine
+
+    incidents = [
+        {
+            "offense_id": "a1",
+            "report_year": 2025,
+            "offense_category": "PROPERTY CRIME",
+            "precinct": "North",
+        },
+        {
+            "offense_id": "a2",
+            "report_year": 2025,
+            "offense_category": "VIOLENT CRIME",
+            "precinct": "West",
+        },
+        {
+            "offense_id": "a3",
+            "report_year": 2024,
+            "offense_category": "PROPERTY CRIME",
+            "precinct": "North",
+        },
+    ]
+    migrate.main()
+    with rw_engine().begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO datasets (dataset_key, title, row_count, first_year, last_year) "
+                "VALUES ('seattle_crime', 'SPD Crime', 3, 2024, 2025)"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO crime_incidents (offense_id, report_year, offense_category, precinct) "
+                "VALUES (:offense_id, :report_year, :offense_category, :precinct)"
+            ),
+            incidents,
+        )
+    return sqlite_env
+
+
+@pytest.fixture
 def loaded_db(sqlite_env):
     """Migrated temp DB with a handful of rows the agent tools can query."""
     from db import migrate

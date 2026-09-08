@@ -82,4 +82,9 @@ SPEC = SourceSpec(
     catalog_path="catalog/seattle_energy.yaml",
     model_module="model.seattle_energy",
     refresh="annual",
+    # buildings is a slowly-changing dimension: keep the latest non-null
+    # attribute per building, ordered by the source's datayear.
+    static_table="buildings",
+    static_sort_key="datayear",
+    # time_column="datayear", year_column="data_year" are the defaults
 )

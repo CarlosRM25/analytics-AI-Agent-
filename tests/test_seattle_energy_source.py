@@ -10,7 +10,7 @@ import pytest
 from sources import base
 from sources.seattle_energy import SPEC
 
-_ALLOWED_DTYPES = {"str", "int", "float", "bool"}
+_ALLOWED_DTYPES = {"str", "int", "float", "bool", "year"}
 _SCHEMA_SQL = Path(__file__).resolve().parents[1] / "db" / "schema.sql"
 
 

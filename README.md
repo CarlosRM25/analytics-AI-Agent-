@@ -12,19 +12,21 @@ Public civic data (Seattle Building Energy Benchmarking, via the Socrata SODA
 API) → config-driven ingestion → SQLite → a pandas/scikit-learn model → a
 hand-written tool-use loop on the Claude API → a thin CLI / Flask interface.
 
-> **Status: M8 — public-demo hardening (built, not yet deployed).** M1 loads
-> 38,309 rows to SQLite; M2 settles the target + features; M3 trains the
-> `is_high_emitter` classifier (temporal ROC-AUC 0.86, building-disjoint 0.76);
-> **M4–M5 are a hand-written tool-use loop on the Claude API** — `list_datasets`
-> / `describe_schema` / `run_sql` (guardrailed), `predict` (the M3 model),
+> **Status: M9 — a second dataset drops in.** M1 loads 38,309 energy rows to
+> SQLite; M2 settles the target + features; M3 trains the `is_high_emitter`
+> classifier (temporal ROC-AUC 0.86, building-disjoint 0.76); **M4–M5 are a
+> hand-written tool-use loop on the Claude API** — `list_datasets` /
+> `describe_schema` / `run_sql` (guardrailed), `predict` (the M3 model),
 > `make_chart` (Plotly). **M6** adds a `click` CLI and a 15-question eval harness
 > (~$0.004/q on Haiku with prompt caching, 15/15). **M7** is the Cloud Run image
 > (slim + gunicorn, read-only baked-in DB, inline `data:` charts). **M8** wraps
-> `/ask` with a response cache, per-visitor + global rate limits, a monthly
-> budget cutoff, CORS lock, and an offline-first `frontend/` gallery — all inert
-> without `REDIS_URL`, verified against a real Redis. `ruff` + `pytest` green
-> (105 tests). Next: an actual Cloud Run deploy (needs a GCP project). Full
-> design: `analytics-agent-architecture.md`.
+> `/ask` with a response cache, rate limits, a monthly budget cutoff, CORS lock,
+> and an offline-first `frontend/` gallery — all inert without `REDIS_URL`.
+> **M9** adds SPD crime (`tazs-3rd5`, ~213k rows) as a second `SourceSpec` —
+> `agent/` and `app/` unchanged; only `ingest/run.py` + `SourceSpec` needed a
+> one-time generalisation. `ruff` + `pytest` green (114 tests). Next: an actual
+> Cloud Run deploy (needs a GCP project). Full design:
+> `analytics-agent-architecture.md`.
 
 ## System overview
 
@@ -73,18 +75,21 @@ pip install -r requirements.txt
 ruff check . && pytest
 ```
 
-`analytics.db` ships in the repo (a read-only snapshot). To rebuild it from
-Socrata — do this when Seattle republishes the dataset (~annual):
+`analytics.db` ships in the repo with the **energy** dataset (~6.6 MB, read-only
+snapshot). The **crime** slice (~213k rows, ~60 MB) is loaded on demand — it's
+too big for git for a stretch source:
 
 ```bash
-python -m db.migrate                          # (re)create the schema
-python -m ingest.run --source seattle_energy --full-refresh  # ~20s, ~38k rows
+python -m db.migrate                                          # (re)creates the schema (both tables)
+python -m ingest.run --source seattle_energy --full-refresh   # ~20s, ~38k rows (already in the repo DB)
+python -m ingest.run --source seattle_crime  --since 2024     # ~2.5m, ~213k rows (a slice of 1.5M)
 ```
 
 Ask the agent a question (needs `ANTHROPIC_API_KEY` in `.env`):
 
 ```bash
 python -m app.cli ask "which property types have the worst emissions intensity?"
+python -m app.cli ask --source seattle_crime "which precinct had the most car prowls in 2025?"
 python -m app.api            # serve POST /ask + GET /health on :8000
 python -m evals.run --dry-run # list the eval question set; drop --dry-run to grade (spends API $)
 ```
@@ -142,4 +147,4 @@ analytics-agent/
 | **M6** | Interface + evals | ✅ `app/cli.py` + `app/api.py` (`POST /ask`, `GET /health`); `evals/` — 15 questions, grades pass rate / iterations / $-per-q; prompt caching engaged (~$0.004/q on Haiku) |
 | **M7** | Containerize + deploy | ✅ `deploy/Dockerfile` (slim + gunicorn) + `.dockerignore` + `cloudrun.yaml`; `analytics.db` + model committed and baked in; `mode=ro` DB + inline `data:` charts on `DEPLOY_MODE=deployed`; `docker build` + container run verified (`/health`, `/ask`) |
 | **M8** | Public-demo hardening | ✅ `/ask` middleware — response cache, per-visitor + global rate limits, monthly-budget cutoff, CORS lock, optional Turnstile (all inert without `REDIS_URL`); offline-first `frontend/` gallery + `examples.json`; `warm_cache.py` + `MONITORING.md`. Verified vs a real Redis; not yet deployed |
-| M9 | Expansion (stretch) | a second `SourceSpec`, or the permits join |
+| **M9** | Expansion (stretch) | ✅ SPD crime (`tazs-3rd5`, NIBRS) as a 2nd `SourceSpec` — `sources/seattle_crime.py` + `catalog/seattle_crime.yaml`, 2024-present (~213k rows) in `crime_incidents`; `agent/`+`app/` unchanged, `ingest/run.py` generalised once; `prompts.py` made source-agnostic. Live-verified on Haiku |

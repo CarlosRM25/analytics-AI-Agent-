@@ -11,10 +11,41 @@ boundary, but nothing here depends on the other projects.
 
 ## Status
 
-_M1–M7 merged to `main`. M8 (`m8-hardening`) is an open PR. The milestone table
-is current; older milestone prose is kept for context._
+_M1–M8 merged to `main`. M9 (`m9-crime`) is an open PR. The milestone table is
+current; older milestone prose is kept for context._
 
-**M8 — public-demo hardening, complete** (branch `m8-hardening`, PR open).
+**M9 — second dataset (SPD crime), complete** (branch `m9-crime`, PR open).
+
+- ✅ `sources/seattle_crime.py` + `catalog/seattle_crime.yaml` — the "datasets
+  are plug-ins" proof. Resource `tazs-3rd5` ("SPD Crime Data: 2008-Present",
+  NIBRS), verified ~1,559,208 rows; we load 2024-present (~213,585 rows) into one
+  flat `crime_incidents` table. Column names all differed from the doc's guess
+  (same lesson as energy M1).
+- ✅ The abstraction held where it matters: **`agent/` and `app/` are unchanged.**
+  `answer_question(q, source="seattle_crime")`, `describe_schema`, `list_datasets`
+  (now returns both), `POST /ask {"source": "seattle_crime"}` all just work.
+- ✅ Ingestion needed a **one-time generalisation** (a third source is now config
+  only): `SourceSpec` gained `time_column` / `time_is_datetime` / `year_column` /
+  `static_table` / `static_sort_key` / `null_tokens`; `ingest/run.py`'s hardcoded
+  `datayear` / `buildings` / `energy_records` became spec-driven; `_coerce` got a
+  `"year"` dtype (datetime → year) and per-source null tokens (`-`, `REDACTED`).
+  Energy re-ingest is byte-identical (42,180 upserts). `db/schema.sql` +
+  `crime_incidents` (+ indexes).
+- ✅ `agent/prompts.py` is now **source-agnostic**: the facts / examples /
+  column-values / source-rules moved out of Python constants into each catalog's
+  `prompt:` block. Energy prefix still 4,673 tokens (caches on Haiku); crime is
+  3,526 (under the ~4,096 floor — fine for a secondary source).
+- ✅ **The committed `analytics.db` stays energy-only (~6.6 MB).** The crime slice
+  is ~213k rows / ~60 MB — too heavy for git for a stretch source. Load it on
+  demand: `python -m db.migrate && python -m ingest.run --source seattle_crime
+  --since 2024` (~2.5 min). `schema.sql` ships the `crime_incidents` table, so
+  `migrate` creates it empty; tests use `loaded_crime_db` (a temp DB).
+- ✅ Live-verified on Haiku: "most property crime by precinct 2025" → North
+  12,525; "shootings by year" → 1,011 / 872 / 515, flagged 2026 as partial.
+- ✅ `tests/test_seattle_crime_source.py` (8) + crime cases in `test_agent.py` +
+  `_coerce`/`_dedupe` updates. **114 tests.**
+
+**M8 — public-demo hardening, complete** (merged).
 
 - ✅ `app/store.py` — one pooled `redis.Redis` from `REDIS_URL`, or `None`. Every
   consumer treats `None` as "feature off", so the whole demo layer is inert until
@@ -321,7 +352,7 @@ MySQL design — §8.8 anticipated the swap.)*
 | **M6** | Interface + evals | ✅ `app/cli.py` (`analyst ask`) + `app/api.py` (`POST /ask` · `GET /health`); `evals/questions.yaml` (15) + `run.py` reporting pass rate / iterations / tokens / $-per-q / cache-hit-rate; prompt caching now engages (schema folded into the system prompt) — 15/15, ~$0.004/q on Haiku |
 | **M7** | Containerize + deploy | ✅ `deploy/Dockerfile` (`python:3.11-slim` + gunicorn + `deploy/requirements.txt`) · `.dockerignore` · `deploy/cloudrun.yaml`; `analytics.db` + `model-*.joblib` committed and baked in; `ro_engine` `mode=ro` on `deployed`; `make_chart` returns a `data:text/html` URI on `deployed`; `_REQUIRED["deployed"]` = just the API key. **`docker build` + run verified**: container serves `/health` + `/ask` (descriptive / predict / chart), gunicorn as `appuser`. |
 | **M8** | Public-demo hardening | ✅ `app/{store,cache,limits,budget}.py` + `/ask` middleware — response cache (a hit is free), per-visitor + global daily rate limit, monthly-budget cutoff, CORS lock, optional Turnstile. All inert without `REDIS_URL`. `frontend/index.html` offline-first gallery + `examples.json` (8 pre-run Q&A). `deploy/warm_cache.py` + `cloudrun.yaml` M8 env + `MONITORING.md` runbook. Verified against a real Redis container. **Not yet deployed** (no GCP project). 105 tests. |
-| M9 | Expansion (stretch) | *either* a second `SourceSpec` (SPD crime `tazs-3rd5`, or Metro transit) *or* the `permits` join — not both |
+| **M9** | Expansion (stretch) | ✅ second `SourceSpec` — SPD crime (`tazs-3rd5`, NIBRS), 2024-present slice (~213k rows) in `crime_incidents`. `sources/seattle_crime.py` + `catalog/seattle_crime.yaml`; `agent/`+`app/` unchanged; `ingest/run.py` + `SourceSpec` generalised once (spec-driven time column / dimension / null tokens); `prompts.py` made source-agnostic (facts/examples moved to the catalogs). Live-verified on Haiku. 114 tests. |
 
 ## Open decisions (architecture doc §12 — defaults chosen, Carlos can change)
 

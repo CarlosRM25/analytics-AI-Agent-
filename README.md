@@ -12,14 +12,17 @@ Public civic data (Seattle Building Energy Benchmarking, via the Socrata SODA
 API) → config-driven ingestion → SQLite → a pandas/scikit-learn model → a
 hand-written tool-use loop on the Claude API → a thin CLI / Flask interface.
 
-> **Status: M5 — agent tools complete.** M1 loads 38,309 rows to SQLite; M2
-> settles the target + features; M3 trains the `is_high_emitter` classifier
+> **Status: M6 — interface + evals complete.** M1 loads 38,309 rows to SQLite;
+> M2 settles the target + features; M3 trains the `is_high_emitter` classifier
 > (temporal ROC-AUC 0.86, building-disjoint 0.76); **M4–M5 are a hand-written
 > tool-use loop on the Claude API** — `list_datasets` / `describe_schema` /
 > `run_sql` (guardrailed), `predict` (the M3 model), `make_chart` (Plotly).
-> Live-verified on Haiku 4.5: self-correcting SQL, picks `predict` for "what
-> would the model expect", charts its last query. `ruff` + `pytest` green
-> (56 tests). Next: M6 (CLI + eval harness). Full design:
+> **M6** adds a `click` CLI (`analyst ask`), a Flask `POST /ask` + `GET /health`,
+> and a 15-question eval harness (`evals/`) that grades the agent and reports
+> pass rate / iterations / **$ per question**. Prompt caching now engages (the
+> schema is folded into the system prompt): ~$0.004 per question on Haiku 4.5,
+> 15/15 on the eval set. `ruff` + `pytest` green (77 tests). Next: M7
+> (containerize + deploy to Cloud Run). Full design:
 > `analytics-agent-architecture.md`.
 
 ## System overview
@@ -72,6 +75,14 @@ python -m db.migrate                        # create analytics.db
 python -m ingest.run --source seattle_energy # load ~38k rows (~30s)
 ```
 
+Ask the agent a question (needs `ANTHROPIC_API_KEY` in `.env`):
+
+```bash
+python -m app.cli ask "which property types have the worst emissions intensity?"
+python -m app.api            # serve POST /ask + GET /health on :8000
+python -m evals.run --dry-run # list the eval question set; drop --dry-run to grade (spends API $)
+```
+
 No `.env` needed for local work — SQLite has no credentials. Add one (copy
 `.env.example`) when you get to the agent (M4): it needs `ANTHROPIC_API_KEY`.
 
@@ -106,7 +117,7 @@ analytics-agent/
 | **M3** | Baseline model | ✅ HGB + LogReg baseline; temporal + building-disjoint splits; ROC-AUC 0.86 / 0.76; `model_card.md` + metrics artifacts |
 | **M4** | Agent loop | ✅ `agent/` — 3 tools + guardrails, hand loop, `trace.py`; `python -m agent.loop "question"`; live-verified, self-correcting SQL |
 | **M5** | `predict` + `make_chart` | ✅ `predict` (M3 model, gated on `model_module`) + `make_chart` (Plotly, charts `data="last_query"`); agent picks the right tool per question |
-| M6 | Interface + evals | `cli.py`, `POST /ask`, `evals/` reporting pass rate / cost |
+| **M6** | Interface + evals | ✅ `app/cli.py` + `app/api.py` (`POST /ask`, `GET /health`); `evals/` — 15 questions, grades pass rate / iterations / $-per-q; prompt caching engaged (~$0.004/q on Haiku) |
 | M7 | Containerize + deploy | Cloud Run, SQLite baked in, `claude-haiku-4-5` |
 | M8 | Public-demo hardening | offline gallery, rate limits, response cache, spend caps |
 | M9 | Expansion (stretch) | a second `SourceSpec`, or the permits join |

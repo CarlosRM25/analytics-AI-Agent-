@@ -1,0 +1,580 @@
+{
+  "started_at": "2026-09-08T04:25:26+00:00",
+  "model": "claude-haiku-4-5",
+  "source": "seattle_energy",
+  "n": 15,
+  "n_passed": 15,
+  "avg_turns": 2.13,
+  "avg_tokens": 11229,
+  "total_cost_usd": 0.0588,
+  "cost_per_question": 0.0039,
+  "wall_seconds": 105.9,
+  "cache_hit_rate": 1.0,
+  "items": [
+    {
+      "id": "q01",
+      "kind": "descriptive",
+      "question": "How many distinct buildings are in the benchmarking dataset?",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:run_sql",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "numeric",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 2,
+      "tokens": 9902,
+      "cost_usd": 0.002204,
+      "latency_ms": 4547.4,
+      "cache_read_tokens": 8976,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "There are **3,871 distinct buildings** in the Seattle Building Energy Benchmarking dataset.",
+      "sql": [
+        "SELECT COUNT(DISTINCT ose_building_id) AS distinct_buildings FROM buildings;"
+      ],
+      "charts": [],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q02",
+      "kind": "descriptive",
+      "question": "What range of years does the energy data cover?",
+      "passed": true,
+      "checks": [
+        {
+          "name": "contains:2015",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "contains:2025",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 1,
+      "tokens": 4902,
+      "cost_usd": 0.001191,
+      "latency_ms": 2959.4,
+      "cache_read_tokens": 4488,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "Based on the dataset description provided, the energy data covers **2015 through 2025**.\n\nThe dataset includes approximately 38,309 energy records across 3,871 buildings spanning these 11 calendar years. Coverage has grown over time, with roughly 3,175 buildings reporting in 2015 and about 3,700 by 2024.",
+      "sql": [],
+      "charts": [],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q03",
+      "kind": "descriptive",
+      "question": "What percentage of annual filings are marked compliant?",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:run_sql",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "contains_any",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 2,
+      "tokens": 10124,
+      "cost_usd": 0.002814,
+      "latency_ms": 5476.7,
+      "cache_read_tokens": 8976,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "**93.4% of annual filings are marked Compliant.**\n\nOut of 38,309 total energy_records filings across all years (2015-2025):\n- **35,796 filings (93.4%)** are marked \"Compliant\"\n- **2,513 filings (6.6%)** are marked \"Not Compliant\"",
+      "sql": [
+        "\nSELECT compliance_status, COUNT(*) AS n,\n       ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 1) AS pct\nFROM energy_records\nGROUP BY 1\n"
+      ],
+      "charts": [],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q04",
+      "kind": "descriptive",
+      "question": "What is the most common primary property type by building count?",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:run_sql",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "contains:multifamily",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 2,
+      "tokens": 10107,
+      "cost_usd": 0.002757,
+      "latency_ms": 5164.5,
+      "cache_read_tokens": 8976,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "The most common primary property type by building count is **Multifamily Housing** with **1,971 buildings**.\n\nThis aligns with the dataset documentation, which notes that Multifamily Housing is the largest category in the Seattle Building Energy Benchmarking dataset.",
+      "sql": [
+        "\nSELECT b.primary_property_type,\n       COUNT(DISTINCT b.ose_building_id) AS building_count\nFROM buildings b\nGROUP BY 1\nORDER BY building_count DESC\nLIMIT 1;\n"
+      ],
+      "charts": [],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q05",
+      "kind": "descriptive",
+      "question": "Which neighborhood has the most benchmarked buildings?",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:run_sql",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "contains:east",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 2,
+      "tokens": 10039,
+      "cost_usd": 0.002525,
+      "latency_ms": 4893.8,
+      "cache_read_tokens": 8976,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "**EAST** is the neighborhood with the most benchmarked buildings, with **576 buildings**.",
+      "sql": [
+        "\nSELECT b.neighborhood, COUNT(DISTINCT b.ose_building_id) AS building_count\nFROM buildings b\nGROUP BY b.neighborhood\nORDER BY building_count DESC\nLIMIT 1;\n"
+      ],
+      "charts": [],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q06",
+      "kind": "descriptive",
+      "question": "How many distinct buildings have ever been flagged as demolished in the data?",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:run_sql",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "table:energy_records",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "numeric",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 2,
+      "tokens": 10018,
+      "cost_usd": 0.002612,
+      "latency_ms": 3173.2,
+      "cache_read_tokens": 8976,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "**75 distinct buildings** have ever been flagged as demolished in the data.\n\nThis count comes from checking the `demolished` column in the `energy_records` table, which tracks whether a property was demolished as of the 2023 reporting cycle. These 75 buildings represent properties that were removed from the Seattle building stock during the period covered by the benchmarking data.",
+      "sql": [
+        "\nSELECT COUNT(DISTINCT ose_building_id) AS n_demolished_buildings\nFROM energy_records\nWHERE demolished = 1;\n"
+      ],
+      "charts": [],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q07",
+      "kind": "descriptive",
+      "question": "In 2023, what was the median GHG emissions intensity for hotels?",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:run_sql",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "table:energy_records",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "table:buildings",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "numeric",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 2,
+      "tokens": 10194,
+      "cost_usd": 0.002928,
+      "latency_ms": 5537.8,
+      "cache_read_tokens": 8976,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "In 2023, the median GHG emissions intensity for hotels in Seattle was **1.745 kg CO2e/sf** (kilograms of CO2 equivalent per square foot).",
+      "sql": [
+        "\nSELECT median(r.ghg_emissions_intensity) AS median_ghg_emissions_intensity\nFROM energy_records r\nJOIN buildings b USING (ose_building_id)\nWHERE b.primary_property_type = 'Hotel' \n  AND r.data_year = 2023\n  AND r.ghg_emissions_intensity IS NOT NULL\n"
+      ],
+      "charts": [],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q08",
+      "kind": "descriptive",
+      "question": "In 2023, which property types had the highest median GHG emissions intensity per square foot? Only consider types with at least 20 buildings.\n",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:run_sql",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "table:energy_records",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "table:buildings",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "contains_any",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 2,
+      "tokens": 11463,
+      "cost_usd": 0.005593,
+      "latency_ms": 8547.6,
+      "cache_read_tokens": 8976,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "**In 2023, the property types with the highest median GHG emissions intensity per square foot (among those with at least 20 buildings) were:**\n\n1. **Supermarket/Grocery Store** \u2014 5.18 kg CO\u2082e/sf (35 buildings)\n2. **Laboratory** \u2014 4.95 kg CO\u2082e/sf (32 buildings)\n3. **Other - Recreation** \u2014 3.62 kg CO\u2082e/sf (22 buildings)\n\nThese are substantially higher than other property types. For comparison, the next tier includes:\n- **Hotel** \u2014 1.75 kg CO\u2082e/sf (78 buildings)\n- **Senior Living Community** \u2014 1.51 kg CO\u2082e/sf (40 buildings)\n- **K-12 School** \u2014 1.21 kg CO\u2082e/sf (145 buildings)\n\nAt the lower end:\n- **Multifamily Housing** \u2014 0.40 kg CO\u2082e/sf (1,881 buildings)\n- **Office** \u2014 0.38 kg CO\u2082e/sf (454 buildings)\n- **Self-Storage Facility** \u2014 0.11 kg CO\u2082e/sf (42 buildings, lowest)\n\nSupermarkets and laboratories are notably carbon-intensive, likely due to refrigeration/cooling requirements for supermarkets and specialized equipment/climate control for laboratories.",
+      "sql": [
+        "\nSELECT b.primary_property_type,\n       COUNT(*) AS n_buildings,\n       median(r.ghg_emissions_intensity) AS median_ghg_intensity_kgco2e_sf\nFROM energy_records r\nJOIN buildings b USING (ose_building_id)\nWHERE r.data_year = 2023 \n  AND r.ghg_emissions_intensity IS NOT NULL\nGROUP BY b.primary_property_type\nHAVING COUNT(*) >= 20\nORDER BY median_ghg_intensity_kgco2e_sf DESC;\n"
+      ],
+      "charts": [],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q09",
+      "kind": "descriptive",
+      "question": "Have office buildings gotten more energy efficient since 2018? Use the weather-normalized site EUI.\n",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:run_sql",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "table:energy_records",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "table:buildings",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "contains_any",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 3,
+      "tokens": 17194,
+      "cost_usd": 0.007644,
+      "latency_ms": 12011.9,
+      "cache_read_tokens": 13464,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "## Answer\n\n**Yes, office buildings have become notably more energy efficient since 2018.**\n\n**Key findings:**\n\n- **Average weather-normalized site EUI has declined 23.4%** from 2018 to 2025:\n  - 2018: **58.4 kBtu/sf**\n  - 2025: **44.8 kBtu/sf**\n\n- **Median EUI also improved significantly**, from 51.1 (2018) to 40.0 (2025), a **21.6% reduction**.\n\n- **Most improvement occurred in 2020** (drop from 57.2 to 50.0 kBtu/sf), coinciding with pandemic-driven changes in occupancy patterns. However, the trend has *continued* to improve through 2025, with consistent reductions in both 2023\u20132024 and 2024\u20132025.\n\n- The sample size is stable at ~440 office buildings per year, so the trend is robust.\n\nThe chart has been saved and shows the clear downward trend in energy intensity over this period.",
+      "sql": [
+        "\nSELECT r.data_year, \n       COUNT(*) AS n_buildings,\n       AVG(r.site_eui_wn) AS avg_site_eui_wn,\n       MEDIAN(r.site_eui_wn) AS median_site_eui_wn\nFROM energy_records r\nJOIN buildings b USING (ose_building_id)\nWHERE b.primary_property_type = 'Office' \n  AND r.data_year >= 2018\n  AND r.site_eui_wn IS NOT NULL\nGROUP BY r.data_year\nORDER BY r.data_year;\n"
+      ],
+      "charts": [
+        "outputs/charts/c8b8b7f3-1.html"
+      ],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q10",
+      "kind": "descriptive",
+      "question": "Citywide, did total reported GHG emissions go up or down between 2015 and 2024?\n",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:run_sql",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "table:energy_records",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "contains_any",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 2,
+      "tokens": 10482,
+      "cost_usd": 0.003908,
+      "latency_ms": 7491.2,
+      "cache_read_tokens": 8976,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "**Total reported GHG emissions went UP significantly between 2015 and 2024.**\n\n- **2015**: 335,862 metric tons CO\u2082e (from 3,152 buildings)\n- **2024**: 1,006,702 metric tons CO\u2082e (from 3,530 buildings)\n\nThat's an increase of **670,840 metric tons CO\u2082e**, or roughly **3\u00d7 higher** in 2024.\n\nHowever, it's important to note that this comparison is partly driven by **increased coverage**: the number of buildings reporting usable data grew from 3,152 to 3,530 (about 12% more buildings). To see whether per-building emissions efficiency improved or worsened, it would be more meaningful to compare **emissions intensity** (kg CO\u2082e per square foot) rather than raw totals. Would you like me to check that metric instead?",
+      "sql": [
+        "\nSELECT r.data_year, SUM(r.total_ghg_emissions) AS total_ghg_emissions_mtco2e, COUNT(*) AS n_buildings\nFROM energy_records r\nWHERE r.data_year IN (2015, 2024) AND r.total_ghg_emissions IS NOT NULL\nGROUP BY r.data_year\nORDER BY r.data_year;\n"
+      ],
+      "charts": [],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q11",
+      "kind": "descriptive",
+      "question": "What is the median ENERGY STAR score for Multifamily Housing buildings in 2023?",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:run_sql",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "table:energy_records",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "table:buildings",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "numeric",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 2,
+      "tokens": 10305,
+      "cost_usd": 0.003291,
+      "latency_ms": 6110.0,
+      "cache_read_tokens": 8976,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "The **median ENERGY STAR score for Multifamily Housing buildings in 2023 is 88**.\n\nThis is based on 1,593 Multifamily Housing buildings that reported a valid ENERGY STAR score that year. An ENERGY STAR score of 88 is well above the national median of 50, indicating that the typical Multifamily Housing property in Seattle is performing quite efficiently by EPA standards.",
+      "sql": [
+        "\nSELECT median(r.energy_star_score) AS median_energy_star_score,\n       COUNT(*) AS n_with_score\nFROM energy_records r\nJOIN buildings b USING (ose_building_id)\nWHERE b.primary_property_type = 'Multifamily Housing'\n  AND r.data_year = 2023\n  AND r.energy_star_score IS NOT NULL\n"
+      ],
+      "charts": [],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q12",
+      "kind": "chart",
+      "question": "Show me how the number of buildings reporting each year has changed. Include a chart.",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:run_sql",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "tool:make_chart",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "chart",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 3,
+      "tokens": 16209,
+      "cost_usd": 0.006571,
+      "latency_ms": 10273.9,
+      "cache_read_tokens": 13464,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "## Summary\n\n**Number of buildings reporting by year (with usable emissions data):**\n\n| Year | Buildings |\n|------|-----------|\n| 2015 | 3,068 |\n| 2016 | 3,132 |\n| 2017 | 3,203 |\n| 2018 | 3,290 |\n| 2019 | 3,356 |\n| 2020 | 3,432 |\n| 2021 | 3,137 |\n| 2022 | 3,431 |\n| 2023 | 3,565 |\n| 2024 | 3,529 |\n| 2025 | 3,332 |\n\n**Key observations:**\n\n- **Steady growth from 2015\u20132020**: The number of reporting buildings increased from ~3,068 to ~3,432, reflecting growing compliance and coverage under Seattle's benchmarking ordinance.\n- **Dip in 2021**: A notable drop to 3,137 buildings (likely due to pandemic-related reporting disruptions or data quality issues).\n- **Recovery and peak in 2023**: Reporting rebounded strongly, peaking at 3,565 buildings in 2023.\n- **Slight decline 2023\u20132025**: Numbers have settled around 3,300\u20133,500 buildings.\n\nThe chart has been saved to `outputs/charts/41a3eecb-1.html`.",
+      "sql": [
+        "\nSELECT data_year, COUNT(DISTINCT ose_building_id) AS num_buildings\nFROM energy_records\nWHERE ghg_emissions_intensity IS NOT NULL\nGROUP BY data_year\nORDER BY data_year;\n"
+      ],
+      "charts": [
+        "outputs/charts/41a3eecb-1.html"
+      ],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q13",
+      "kind": "chart",
+      "question": "Chart the average weather-normalized site EUI for office buildings by year.",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:run_sql",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "tool:make_chart",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "table:energy_records",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "table:buildings",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "chart",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 3,
+      "tokens": 16539,
+      "cost_usd": 0.006589,
+      "latency_ms": 9293.5,
+      "cache_read_tokens": 13464,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "Perfect! Here's the trend for office buildings in Seattle:\n\n**Key Finding:** Office buildings have become significantly more energy-efficient over the past decade, with average weather-normalized site EUI declining from **62.6 kBtu/sf in 2015** to **44.8 kBtu/sf in 2025**\u2014a **28% reduction** over 10 years.\n\n**Notable patterns:**\n- **2015\u20132019**: Steady annual improvements (62.6 \u2192 57.2 kBtu/sf)\n- **2020**: Sharp drop to 50.0 kBtu/sf\u2014likely due to reduced occupancy during COVID-19 lockdowns\n- **2021\u20132025**: Continued efficiency gains as buildings recovered operations, reaching the lowest levels yet\n\nThe chart has been saved to `outputs/charts/33ca0645-1.html` and shows a clear downward trajectory, indicating that Seattle's office sector is becoming progressively more energy-efficient.",
+      "sql": [
+        "SELECT r.data_year, AVG(r.site_eui_wn) AS avg_site_eui_wn\nFROM energy_records r\nJOIN buildings b USING (ose_building_id)\nWHERE b.primary_property_type = 'Office' AND r.site_eui_wn IS NOT NULL\nGROUP BY 1\nORDER BY 1;"
+      ],
+      "charts": [
+        "outputs/charts/33ca0645-1.html"
+      ],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q14",
+      "kind": "predictive",
+      "question": "What would the model expect for a 40-year-old office building of about 200,000 square feet with no ENERGY STAR score?\n",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:predict",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "contains_any",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 2,
+      "tokens": 10344,
+      "cost_usd": 0.003734,
+      "latency_ms": 9714.7,
+      "cache_read_tokens": 8976,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "**Model Prediction:**\n\nFor a 40-year-old office building with approximately 200,000 square feet and no ENERGY STAR score, the model predicts:\n\n- **is_high_emitter: No (0)** \u2014 the model expects this building is **not** a high emitter (i.e., its GHG emissions intensity would be **at or below** the median for office buildings in its year).\n- **Confidence: 44.5%** \u2014 however, this is a soft prediction; there's meaningful uncertainty here.\n\n**Important caveat:** The model's accuracy for genuinely new buildings not in the training set is approximately **ROC-AUC ~0.76**, which is reasonable but not perfect. The strongest predictive signals are building age, floor area (log), and property type, so the core drivers of this prediction are sound, but other factors (location, council district, number of floors, parking share, ENERGY STAR status) could shift the outcome.\n\nIn summary: the model leans toward this office not being a high emitter, but with substantial uncertainty baked in.",
+      "sql": [],
+      "charts": [],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    },
+    {
+      "id": "q15",
+      "kind": "predictive",
+      "question": "Does the model think a brand-new 5-story Multifamily Housing building with an ENERGY STAR score of 90 would be a high emitter?\n",
+      "passed": true,
+      "checks": [
+        {
+          "name": "tool:predict",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "contains_any",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "model_turns": 2,
+      "tokens": 10612,
+      "cost_usd": 0.004474,
+      "latency_ms": 8611.1,
+      "cache_read_tokens": 8976,
+      "cache_creation_tokens": 0,
+      "stopped": "end_turn",
+      "answer": "**Yes, the model predicts it would be a high emitter** \u2014 but just barely, and with low confidence.\n\nThe model estimates a **51.9% probability** that this building would be classified as a high emitter (i.e., have GHG intensity above the median for Multifamily Housing in its year). Since the probability exceeds 50%, it's classified as a high emitter (is_high_emitter = 1).\n\nHowever, a 52% prediction is very close to the borderline \u2014 essentially a coin flip. This makes sense: a brand-new building (building_age = 0) with a high ENERGY STAR score (90) has strong signals *against* being a high emitter, but the model also doesn't have information about floor area or parking share, which are material factors.\n\n**Note:** The model generalizes to genuinely new buildings with ROC-AUC ~0.76, so treat this as a reasonable estimate but not a precise forecast.",
+      "sql": [],
+      "charts": [],
+      "judge_pass": null,
+      "judge_reason": "",
+      "error": null
+    }
+  ]
+}

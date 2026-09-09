@@ -7,6 +7,22 @@ caps, kill switch); this covers the deploy itself.
 Budget about 90 minutes the first time. Nothing here costs money at demo volume —
 see [What this actually costs](#what-this-actually-costs).
 
+> **Shell:** every command here is **PowerShell 5.1 on Windows**, because that's
+> what this project is developed on. Three things differ from the bash you'll find
+> in most GCP docs, and all three fail *loudly* except the last one, which fails
+> silently and corrupts a secret:
+>
+> | Bash | PowerShell | Why |
+> | --- | --- | --- |
+> | `curl` | **`curl.exe`** | `curl` is an alias for `Invoke-WebRequest`, which takes completely different flags. The `.exe` runs the real binary in `C:\Windows\System32`. |
+> | `a && b` | `a; b` | `&&` is a parser error in PS 5.1. Use `a; if ($?) { b }` when b must depend on a. |
+> | `--format='value(x)'` | `--format="value(x)"` | Unquoted parens make PowerShell try to *execute* `x` as a command. |
+> | `printf %s "$v" > f` | `[IO.File]::WriteAllText(f, $v)` | `Out-File` adds a UTF-8 BOM **and** a trailing CRLF; `Set-Content` adds the CRLF. Either one corrupts an API key with no visible symptom. |
+> | `curl -d '{"a":"b c"}'` | `Invoke-RestMethod -Body (… \| ConvertTo-Json)` | PowerShell mangles inline JSON on its way to a native exe — quotes stripped, or split on spaces. See step 6. |
+>
+> On macOS or Linux, drop the `.exe`, swap `;` for `&&`, and use `$(...)` for
+> command substitution.
+
 ---
 
 ## 0. The mental model
@@ -49,14 +65,42 @@ strangers: the rate limiter, the response cache and the budget cutoff all live i
      matters less than you'd think — the agent makes a handful of Redis calls per
      question against ~15 seconds of Claude API time.
    - **Type:** Regional. Global costs more and buys nothing here.
-3. Open the database → **Details** → copy the connection string starting with
-   **`rediss://`** — two s's, the TLS one. Not `redis://`, not the REST URL, not the
-   `UPSTASH_REDIS_REST_TOKEN`.
+3. Open the database and find the **connection string**, not the REST credentials.
+   In the connect panel, switch off the **REST** tab to the `redis-cli` / Python one.
 
-   It looks like `rediss://default:AbC123...@us1-example-12345.upstash.io:6379`.
+   It looks like `rediss://default:AbC123...@frank-man-145834.upstash.io:6379`.
 
-4. Keep it handy for the next few minutes. It is a password — it goes into Secret
-   Manager in step 4, never into git.
+   - If the password shows as `********`, click the reveal/eye icon **before**
+     copying, or you'll copy literal asterisks.
+   - If the scheme shows `redis://` rather than `rediss://`, that's fine — try it
+     as-is and see step 1a. There is no separate "rediss link" to hunt for.
+   - `UPSTASH_REDIS_REST_TOKEN` and the `https://` URL are the HTTP API. Wrong ones.
+
+4. Keep it handy. It is a password — it goes into Secret Manager in step 4, never
+   into git.
+
+### 1a. Check it before you go further
+
+A bad `REDIS_URL` doesn't surface until the first `/ask` in production, so prove it
+now. From the repo root:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import redis,sys; print('PING ->', redis.from_url(sys.argv[1], socket_connect_timeout=10).ping())" "PASTE_THE_URL_HERE"
+```
+
+`PING -> True` means you have the right string — use exactly that as `REDIS_URL`.
+
+- `ValueError` about schemes → you pasted the `https://` REST URL, or the host alone.
+- `getaddrinfo failed` → hostname wrong or mistyped.
+- `AuthenticationError` → password wrong, or you copied it while masked.
+- An SSL/handshake error on `rediss://` → retry with `redis://` (TLS is off on that
+  database), and vice versa.
+
+Since this puts the password in your shell history, clear it once you're done:
+
+```powershell
+Clear-History; Remove-Item (Get-PSReadlineOption).HistorySavePath -ErrorAction SilentlyContinue
+```
 
 **Free tier:** generous enough that this demo cannot realistically exceed it — the
 app caps itself at 300 questions/day globally and 5 per visitor. Check the current
@@ -65,7 +109,7 @@ limits on their pricing page; they have changed over time, so the figure quoted 
 
 *Alternative if Upstash gives you trouble:* a free database direct from
 <https://redis.io> (Redis Cloud's free tier — sign up on their own site, **not**
-through GCP Marketplace) also gives you a `rediss://` URL and works identically.
+through GCP Marketplace) also gives you a connection string and works identically.
 
 ---
 
@@ -78,17 +122,21 @@ from the command line, and it's the part you'd lift into CI later.
 2. Run it. Accept the defaults, and **leave "Run gcloud init" checked** at the end.
 3. `gcloud init` opens a browser to log in. Use the Google account the Cloud account
    is on.
-4. **Close and reopen your terminal** — the installer edits PATH and existing shells
+4. **Close and reopen PowerShell** — the installer edits PATH and existing shells
    won't see it.
 5. Confirm:
 
-```bash
+```powershell
 gcloud version
 ```
 
 If `gcloud` still isn't found, it installed to
-`C:\Users\carlo\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin` — add that to
-PATH, or call the full path.
+`C:\Users\carlo\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin`. Add that to
+PATH, or for this session only:
+
+```powershell
+$env:Path += ";C:\Users\carlo\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin"
+```
 
 ---
 
@@ -99,24 +147,26 @@ PATH, or call the full path.
 "My First Project" works, but a named project is easier to find later and easier to
 delete if you want to start over.
 
-```bash
+```powershell
 gcloud projects create analytics-agent-demo --name="Analytics Agent Demo"
 ```
 
-```bash
+```powershell
 gcloud config set project analytics-agent-demo
 ```
 
 If the ID is taken, add digits: `analytics-agent-demo-2026`. Project IDs are globally
 unique and **permanent** — you cannot rename one.
 
-To use the existing project instead:
+To use the existing project instead, list them and set the one you want:
 
-```bash
+```powershell
 gcloud projects list
 ```
 
-then `gcloud config set project <the PROJECT_ID column>`.
+```powershell
+gcloud config set project PASTE_THE_PROJECT_ID
+```
 
 ### 3b. Billing
 
@@ -125,12 +175,12 @@ inside the free tier. A new account comes with $300 of credit for 90 days.
 
 Console → **Billing** → confirm you have a billing account, then link it:
 
-```bash
+```powershell
 gcloud billing accounts list
 ```
 
-```bash
-gcloud billing projects link analytics-agent-demo --billing-account=ACCOUNT_ID
+```powershell
+gcloud billing projects link analytics-agent-demo --billing-account=PASTE_ACCOUNT_ID
 ```
 
 ### 3c. Enable the APIs
@@ -138,7 +188,7 @@ gcloud billing projects link analytics-agent-demo --billing-account=ACCOUNT_ID
 Each is off by default, and the deploy fails with a permission-shaped error if one is
 missing.
 
-```bash
+```powershell
 gcloud services enable run.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
 ```
 
@@ -148,7 +198,7 @@ Takes a minute or two.
 
 `us-west1` is Oregon — closest region to Seattle, and what `cloudrun.yaml` assumes.
 
-```bash
+```powershell
 gcloud config set run/region us-west1
 ```
 
@@ -159,49 +209,59 @@ gcloud config set run/region us-west1
 Two secrets. Neither goes in the image, the repo, or a `--set-env-vars` flag — env
 vars are visible in the console and in `gcloud run services describe`.
 
-```bash
+```powershell
 gcloud secrets create anthropic-api-key --replication-policy=automatic
 ```
 
-```bash
+```powershell
 gcloud secrets create redis-url --replication-policy=automatic
 ```
 
-Now the values. **Don't paste secrets as command arguments** — they land in your
-shell history. Pipe them from a file, then delete it. The API key is already in
-`.env`, so read it from there:
+### 4a. The API key
 
-```bash
-grep '^ANTHROPIC_API_KEY=' .env | cut -d= -f2- | tr -d '\r\n' > /tmp/k && gcloud secrets versions add anthropic-api-key --data-file=/tmp/k && rm /tmp/k
+It's already in `.env`, so read it from there rather than pasting it. Run this from
+the repo root:
+
+```powershell
+$key = ((Select-String -Path .env -Pattern '^ANTHROPIC_API_KEY=' | Select-Object -First 1).Line -replace '^ANTHROPIC_API_KEY=','').Trim(); [System.IO.File]::WriteAllText("$env:TEMP\k", $key); "wrote $((Get-Item "$env:TEMP\k").Length) bytes"
 ```
 
-For the Upstash URL, this reads it without echoing to the screen:
+Expect **108 bytes**. If you get 110 or 113 you used `Set-Content` or `Out-File`
+somewhere — see the shell note at the top; those add a CRLF and a BOM, and Secret
+Manager will store them, and the Anthropic API will 401 with no useful message.
 
-```bash
-read -rs -p "Paste the rediss:// URL: " R && printf %s "$R" > /tmp/r && unset R && gcloud secrets versions add redis-url --data-file=/tmp/r && rm /tmp/r
+```powershell
+gcloud secrets versions add anthropic-api-key --data-file="$env:TEMP\k"; Remove-Item "$env:TEMP\k"; Remove-Variable key
 ```
 
-Verify both landed without a trailing newline — a stray `\n` on an API key is a
-classic silent 401:
+### 4b. The Redis URL
 
-```bash
-gcloud secrets versions access latest --secret=anthropic-api-key | wc -c
+Replace the placeholder with the string you verified in step 1a:
+
+```powershell
+[System.IO.File]::WriteAllText("$env:TEMP\r", "PASTE_THE_VERIFIED_REDIS_URL"); gcloud secrets versions add redis-url --data-file="$env:TEMP\r"; Remove-Item "$env:TEMP\r"
 ```
 
-Expect **108**. Then check the Redis one is a plausible length (not 0, not 1):
+### 4c. Verify both round-trip cleanly
 
-```bash
-gcloud secrets versions access latest --secret=redis-url | wc -c
+```powershell
+foreach ($s in @("anthropic-api-key","redis-url")) { $v = gcloud secrets versions access latest --secret=$s; "{0,-18} {1} chars" -f $s, $v.Length }
 ```
 
-### Let Cloud Run read them
+The key should be **108**. The Redis URL should be somewhere in the 60–120 range —
+what matters is that it isn't 0 or 1.
+
+### 4d. Let Cloud Run read them
 
 Cloud Run runs as the Compute Engine default service account, which cannot read
 secrets until you grant it.
 
-```bash
-PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format='value(projectNumber)') && for s in anthropic-api-key redis-url; do gcloud secrets add-iam-policy-binding "$s" --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" --role="roles/secretmanager.secretAccessor"; done
+```powershell
+$PN = gcloud projects describe (gcloud config get-value project) --format="value(projectNumber)"; foreach ($s in @("anthropic-api-key","redis-url")) { gcloud secrets add-iam-policy-binding $s --member="serviceAccount:$PN-compute@developer.gserviceaccount.com" --role="roles/secretmanager.secretAccessor" }
 ```
+
+Note the quotes around `"value(projectNumber)"` — without them PowerShell tries to
+run `projectNumber` as a command.
 
 ---
 
@@ -216,7 +276,7 @@ PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --f
 
 Make sure Docker Desktop is running (whale icon in the tray).
 
-```bash
+```powershell
 docker build -f deploy/Dockerfile -t analytics-agent .
 ```
 
@@ -225,24 +285,25 @@ fails the build rather than producing a container that 500s at runtime.
 
 Smoke-test before pushing:
 
-```bash
+```powershell
 docker run --rm -p 8080:8080 -e DEPLOY_MODE=local -e ANTHROPIC_API_KEY=dummy analytics-agent
 ```
 
-In another terminal:
+In a **second** PowerShell window:
 
-```bash
-curl localhost:8080/health
+```powershell
+curl.exe localhost:8080/health
 ```
 
 `DEPLOY_MODE=local` so it boots without Redis — you're testing that the image is
-sound, not the demo middleware. Ctrl-C when `/health` comes back OK.
+sound, not the demo middleware. Ctrl-C the first window when `/health` returns
+`{"status":"ok"}`.
 
 ### 5b. Create an Artifact Registry repo
 
 One-time. This is where the image lives.
 
-```bash
+```powershell
 gcloud artifacts repositories create web --repository-format=docker --location=us-west1 --description="Container images"
 ```
 
@@ -250,25 +311,28 @@ gcloud artifacts repositories create web --repository-format=docker --location=u
 
 One-time. Without this the push fails with a 403.
 
-```bash
+```powershell
 gcloud auth configure-docker us-west1-docker.pkg.dev
 ```
 
 ### 5d. Tag and push
 
-```bash
-IMAGE="us-west1-docker.pkg.dev/$(gcloud config get-value project)/web/analytics-agent:latest" && docker tag analytics-agent "$IMAGE" && docker push "$IMAGE" && echo "$IMAGE"
+```powershell
+$IMAGE = "us-west1-docker.pkg.dev/$(gcloud config get-value project)/web/analytics-agent:latest"; docker tag analytics-agent $IMAGE; docker push $IMAGE; $IMAGE
 ```
 
-~188 MB, so a few minutes on a home connection. Note that `IMAGE` value — the next
-step uses it, and it must be set in the *same* terminal.
+~188 MB, so a few minutes on a home connection.
+
+`$IMAGE` is a PowerShell variable and dies with the window. **Steps 5d and 6 must run
+in the same PowerShell session.** If you closed it, just re-run the first assignment
+before deploying.
 
 ---
 
 ## 6. Deploy (~5 minutes)
 
-```bash
-gcloud run deploy analytics-agent --image "$IMAGE" --region us-west1 --allow-unauthenticated --min-instances 0 --max-instances 3 --memory 512Mi --cpu 1 --concurrency 4 --timeout 120 --set-env-vars "DEPLOY_MODE=deployed,ANALYST_MODEL=claude-haiku-4-5,MAX_AGENT_ITERS=6,DEMO_ENABLED=true,RATE_LIMIT_PER_VISITOR_PER_DAY=5,GLOBAL_DAILY_QUESTION_CAP=300,MONTHLY_BUDGET_USD=15,CORS_ALLOWED_ORIGIN=https://portfolio-liart-rho-94.vercel.app" --set-secrets "ANTHROPIC_API_KEY=anthropic-api-key:latest,REDIS_URL=redis-url:latest"
+```powershell
+gcloud run deploy analytics-agent --image $IMAGE --region us-west1 --allow-unauthenticated --min-instances 0 --max-instances 3 --memory 512Mi --cpu 1 --concurrency 4 --timeout 120 --set-env-vars "DEPLOY_MODE=deployed,ANALYST_MODEL=claude-haiku-4-5,MAX_AGENT_ITERS=6,DEMO_ENABLED=true,RATE_LIMIT_PER_VISITOR_PER_DAY=5,GLOBAL_DAILY_QUESTION_CAP=300,MONTHLY_BUDGET_USD=15,CORS_ALLOWED_ORIGIN=https://portfolio-liart-rho-94.vercel.app" --set-secrets "ANTHROPIC_API_KEY=anthropic-api-key:latest,REDIS_URL=redis-url:latest"
 ```
 
 What the flags buy you:
@@ -285,16 +349,40 @@ What the flags buy you:
 
 It prints a **Service URL** like `https://analytics-agent-abc123-uw.a.run.app`.
 
-```bash
-SERVICE_URL=$(gcloud run services describe analytics-agent --region us-west1 --format='value(status.url)') && echo "$SERVICE_URL" && curl "$SERVICE_URL/health"
+```powershell
+$SERVICE_URL = gcloud run services describe analytics-agent --region us-west1 --format="value(status.url)"; $SERVICE_URL; curl.exe "$SERVICE_URL/health"
 ```
 
 To prove the whole loop works end to end — schema read, SQL written and run, answer
-composed:
+composed. **Use `Invoke-RestMethod`, not curl, for this one:**
 
-```bash
-curl -X POST "$SERVICE_URL/ask" -H 'Content-Type: application/json' -d '{"question":"Which neighborhood has the most benchmarked buildings?"}'
+```powershell
+Invoke-RestMethod -Uri "$SERVICE_URL/ask" -Method Post -ContentType "application/json" -Body (@{question="Which neighborhood has the most benchmarked buildings?"} | ConvertTo-Json)
 ```
+
+> **Why not curl here.** Passing inline JSON to a native `.exe` from PowerShell 5.1
+> is genuinely broken, and it fails in a way that looks like a server bug. Neither
+> of the obvious forms survives:
+>
+> | Attempt | What curl actually receives |
+> | --- | --- |
+> | `-d '{"question":"x"}'` | `{question:x}` — quotes stripped |
+> | `-d '{\"q\":\"two words\"}'` | split on the spaces into several arguments |
+> | `-d $(… \| ConvertTo-Json)` | `{question:two words}` — quotes stripped |
+>
+> PowerShell doesn't re-quote an argument that already contains quote characters,
+> so the exe's C runtime re-splits the mangled command line. `Invoke-RestMethod`
+> has no native-exe boundary and no such problem.
+>
+> If you specifically need curl (to see response headers, say), put the body in a
+> file and reference it with `@` — that survives intact:
+>
+> ```powershell
+> [System.IO.File]::WriteAllText("$env:TEMP\q.json", '{"question":"Which neighborhood has the most benchmarked buildings?"}'); curl.exe -X POST "$SERVICE_URL/ask" -H "Content-Type: application/json" -d "@$env:TEMP\q.json"
+> ```
+>
+> Plain GETs like `curl.exe "$SERVICE_URL/health"` are fine — the trap is only
+> inline JSON.
 
 That exercises the agent, but it does **not** test CORS. `_cors` in `app/api.py` sets
 `Access-Control-Allow-Origin` to the configured value on every response without
@@ -302,8 +390,8 @@ looking at the request's `Origin` — the *browser* is what compares the two and
 the mismatch. curl ignores CORS entirely, so it will succeed no matter what the
 header says. To check the header is the value you expect:
 
-```bash
-curl -sS -D - -o /dev/null "$SERVICE_URL/health" | grep -i access-control-allow-origin
+```powershell
+(Invoke-WebRequest "$SERVICE_URL/health").Headers["Access-Control-Allow-Origin"]
 ```
 
 The real CORS test is loading the deployed portfolio page and asking a question.
@@ -329,7 +417,7 @@ the caller's own origin. Consequences:
 
 One thing to be clear-eyed about: CORS is a **browser** mechanism. It stops another
 website from spending your API budget through a visitor's browser, but it does not
-stop anyone who runs `curl` against the service URL. What actually bounds the spend is
+stop anyone who runs curl against the service URL. What actually bounds the spend is
 the per-visitor rate limit, the global daily cap, and the monthly budget cutoff — all
 enforced server-side in `app/`, all independent of where the request came from.
 
@@ -375,7 +463,7 @@ Three layers already live in the code: per-visitor rate limit (5/day), global da
 cap (300), and a monthly dollar budget that disables the demo when hit. Plus a manual
 kill switch:
 
-```bash
+```powershell
 gcloud run services update analytics-agent --region us-west1 --update-env-vars DEMO_ENABLED=false
 ```
 
@@ -386,8 +474,8 @@ to the gallery. No redeploy, no downtime.
 
 ## 9. Warm the cache
 
-```bash
-python -m deploy.warm_cache "$SERVICE_URL"
+```powershell
+.\.venv\Scripts\python.exe -m deploy.warm_cache $SERVICE_URL
 ```
 
 Runs `evals/questions.yaml` through the live `/ask` once so the common questions are
@@ -419,12 +507,19 @@ always-warm container. Keep it at 0.
 
 ## Troubleshooting
 
+**`The term 'X' is not recognized`** — a PowerShell problem, not a GCP one. Either
+gcloud isn't on PATH (step 2), or you hit the unquoted-parens trap: `--format=value(x)`
+makes PowerShell try to execute `x`. Quote it: `--format="value(x)"`.
+
+**`curl` behaves strangely / rejects `-H` or `-d`** — you got `Invoke-WebRequest` via
+the alias. Type `curl.exe`.
+
 **`PERMISSION_DENIED` on deploy** — an API isn't enabled (3c) or billing isn't linked
 (3b).
 
 **Revision failed to start / "container failed to listen on $PORT"** — read the logs:
 
-```bash
+```powershell
 gcloud run services logs read analytics-agent --region us-west1 --limit 50
 ```
 
@@ -432,16 +527,20 @@ Usually pydantic rejecting the environment: `missing required settings for
 DEPLOY_MODE=deployed`. That means `ANTHROPIC_API_KEY`, `REDIS_URL` or
 `CORS_ALLOWED_ORIGIN` didn't arrive. Check what the service actually has:
 
-```bash
-gcloud run services describe analytics-agent --region us-west1 --format='value(spec.template.spec.containers[0].env)'
+```powershell
+gcloud run services describe analytics-agent --region us-west1 --format="value(spec.template.spec.containers[0].env)"
 ```
 
-**Secret access denied in the logs** — the IAM binding in step 4 didn't apply, or you
+**401 from Anthropic although the key is right** — the classic Windows one. A BOM or
+trailing CRLF got into the secret. Re-check with 4c; if it isn't 108, redo 4a with
+`[System.IO.File]::WriteAllText`, not `Out-File` or `Set-Content`.
+
+**Secret access denied in the logs** — the IAM binding in 4d didn't apply, or you
 re-created the secret afterwards. Re-run that command.
 
 **`/health` works but `/ask` returns 500** — almost always Redis. Deployed mode boots
-with a syntactically valid `REDIS_URL` but only *connects* on the first `/ask`. Check
-it's the `rediss://` URL and the password wasn't truncated.
+with a syntactically valid `REDIS_URL` but only *connects* on the first `/ask`. Re-run
+the step 1a check against the exact string you stored.
 
 **Browser console says CORS blocked** — the origin on Cloud Run doesn't exactly match
 the site. It's an exact string compare: scheme, host, no trailing slash.
@@ -460,16 +559,22 @@ var but didn't redeploy. See 7b.
 
 After a code change:
 
-```bash
-docker build -f deploy/Dockerfile -t analytics-agent . && docker tag analytics-agent "$IMAGE" && docker push "$IMAGE" && gcloud run deploy analytics-agent --image "$IMAGE" --region us-west1
+```powershell
+docker build -f deploy/Dockerfile -t analytics-agent .; docker tag analytics-agent $IMAGE; docker push $IMAGE; gcloud run deploy analytics-agent --image $IMAGE --region us-west1
+```
+
+If `$IMAGE` is empty (new window), set it again first:
+
+```powershell
+$IMAGE = "us-west1-docker.pkg.dev/$(gcloud config get-value project)/web/analytics-agent:latest"
 ```
 
 Env vars and secrets persist across deploys — you only pass them again when they change.
 
 After the annual Seattle data refresh, rebuild the baked-in snapshot first:
 
-```bash
-python -m ingest.run --source seattle_energy --full-refresh && python -m model.seattle_energy.train
+```powershell
+.\.venv\Scripts\python.exe -m ingest.run --source seattle_energy --full-refresh; .\.venv\Scripts\python.exe -m model.seattle_energy.train
 ```
 
 then commit the regenerated `analytics.db` and model artifact, and rebuild as above.

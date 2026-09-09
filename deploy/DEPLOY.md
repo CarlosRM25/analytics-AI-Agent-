@@ -321,7 +321,10 @@ gcloud auth configure-docker us-west1-docker.pkg.dev
 $IMAGE = "us-west1-docker.pkg.dev/$(gcloud config get-value project)/web/analytics-agent:latest"; docker tag analytics-agent $IMAGE; docker push $IMAGE; $IMAGE
 ```
 
-~188 MB, so a few minutes on a home connection.
+The image is **~870 MB** uncompressed (scipy, pandas, plotly and scikit-learn
+are most of it). The push transfers compressed layers, so expect a few hundred
+MB over the wire and **10-20 minutes on a home connection** the first time.
+Later pushes only send layers that changed, which is usually just your code.
 
 `$IMAGE` is a PowerShell variable and dies with the window. **Steps 5d and 6 must run
 in the same PowerShell session.** If you closed it, just re-run the first assignment
@@ -492,8 +495,9 @@ Costs a few cents, once.
   monthly allowance of vCPU-seconds. A demo answering a few hundred questions is far
   inside it, and scaling to zero means no idle charge.
 - **Upstash** — free tier, not close to the limit.
-- **Artifact Registry** — a 188 MB image is pennies a month; the free allowance covers
-  it.
+- **Artifact Registry** — storage is billed per GB-month; one ~870 MB image plus a
+  little history is cents, and the free allowance absorbs it. Old revisions do
+  accumulate, so delete stale tags once a year if you redeploy often.
 - **Anthropic API** — the only line item that grows. ~$0.004 per cached-prompt question
   on Haiku 4.5, hard-capped at `MONTHLY_BUDGET_USD=15`.
 

@@ -2,16 +2,22 @@
 # is the full dev set (adds ingestion, notebooks, training, tooling); the image
 # only serves answer_question over Flask, so it drops:
 #   requests (ingest only), kaleido (charts go back as inline HTML, not PNG),
-#   jupyterlab / nbconvert / ipykernel (notebooks), ruff / pytest (tooling),
-#   redis (M8 middleware).
-# Every package here also appears in ../requirements.txt (tests/test_deploy.py
-# enforces that).
+#   jupyterlab / nbconvert / ipykernel (notebooks), ruff / pytest (tooling).
+#
+# Every package here also appears in ../requirements.txt, AND every third-party
+# module app/ or agent/ imports appears here. tests/test_deploy.py enforces both
+# directions. The second check exists because it didn't: this file was written in
+# M7 listing redis as deliberately dropped, which was true right up until M8 put
+# a Redis-backed budget check in front of /ask. The image still built, /health
+# still passed, and /ask 500'd on the first request in production.
 
 anthropic
 SQLAlchemy
 PyYAML
 sqlparse
 pandas
+numpy          # imported directly by agent/tools.py predict(); do not rely on
+               # pandas/scikit-learn pulling it in transitively
 scikit-learn
 joblib
 plotly
@@ -20,3 +26,4 @@ flask
 gunicorn
 pydantic-settings
 python-dotenv
+redis          # M8: app/store.py -> rate limiter, response cache, budget counter

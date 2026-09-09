@@ -101,7 +101,9 @@ current; older milestone prose is kept for context._
   'app.api:create_app()'` on `$PORT`. `ENV DEPLOY_MODE=deployed
   ANALYST_MODEL=claude-haiku-4-5 MAX_AGENT_ITERS=6`. Build fails if the
   data/model are missing. **Built + run-verified** (Docker Desktop): `docker
-  build` clean (~90s), image ~188 MB; container serves `/health` and `/ask` —
+  build` clean (~90s), image **~870 MB** uncompressed — scipy/pandas/plotly/
+  sklearn are ~300 MB of that; the "~188 MB" originally recorded here was wrong,
+  remeasured 2026-09-09; container serves `/health` and `/ask` —
   descriptive (`run_sql` on the `mode=ro` DB), predictive (`predict` loading the
   baked joblib under sklearn 1.9), and chart (`data:text/html` URI); gunicorn
   boots as `appuser`, env `DEPLOY_MODE=deployed`. (The `# syntax=` directive was

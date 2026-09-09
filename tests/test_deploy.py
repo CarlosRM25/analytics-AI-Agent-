@@ -91,6 +91,61 @@ def test_deploy_requirements_is_a_subset_of_root():
     assert not ({"jupyterlab", "ruff", "pytest", "kaleido"} & deploy)
 
 
+# Distribution name -> the name you actually ``import``.
+_IMPORT_NAME = {
+    "scikit-learn": "sklearn",
+    "pyyaml": "yaml",
+    "pydantic-settings": "pydantic_settings",
+    "python-dotenv": "dotenv",
+}
+# Modules the runtime may import without declaring, because something it does
+# declare guarantees them.
+_TRANSITIVE_OK = {"pydantic"}  # pydantic-settings depends on it
+
+
+def test_every_runtime_import_is_installed_in_the_image():
+    """Anything ``app/`` or ``agent/`` imports must be in deploy/requirements.txt.
+
+    The converse of the subset test above, and the one that matters in
+    production: a module missing here still builds, still boots, and still
+    serves /health — then raises ModuleNotFoundError on the first request that
+    reaches it. That is exactly how ``redis`` shipped. M7 wrote that file and
+    listed redis as deliberately dropped; M8 then put a Redis-backed budget
+    check ahead of /ask, and the gap surfaced as a 500 on Cloud Run.
+    """
+    import ast
+    import sys
+
+    declared = set()
+    for line in (_ROOT / "deploy" / "requirements.txt").read_text().splitlines():
+        line = line.split("#")[0].strip()
+        if line:
+            name = line.lower()
+            declared.add(_IMPORT_NAME.get(name, name.replace("-", "_")))
+    declared |= _TRANSITIVE_OK
+
+    local = {p.name for p in _ROOT.iterdir() if p.is_dir() and (p / "__init__.py").exists()}
+    local |= {"config", "app", "agent", "db", "sources", "model", "ingest"}
+
+    missing: dict[str, str] = {}
+    for path in sorted((*(_ROOT / "app").rglob("*.py"), *(_ROOT / "agent").rglob("*.py"))):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Import):
+                mods = [a.name.split(".")[0] for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                mods = [node.module.split(".")[0]]
+            else:
+                continue
+            for mod in mods:
+                if mod in sys.stdlib_module_names or mod in local or mod in declared:
+                    continue
+                missing.setdefault(mod, f"{path.relative_to(_ROOT).as_posix()}:{node.lineno}")
+
+    assert not missing, "imported at runtime but not in deploy/requirements.txt: " + ", ".join(
+        f"{m} ({where})" for m, where in sorted(missing.items())
+    )
+
+
 def test_dockerfile_shape():
     df = (_ROOT / "deploy" / "Dockerfile").read_text()
     assert "FROM python:3.11-slim" in df

@@ -8,6 +8,7 @@ PyYAML              # catalog/*.yaml — column docs read by ingest + describe_s
 sqlparse            # run_sql guardrails (M4)
 
 # --- modeling ---
+numpy               # direct import in agent/tools.py predict()
 pandas
 scikit-learn
 joblib

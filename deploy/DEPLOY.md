@@ -68,7 +68,7 @@ strangers: the rate limiter, the response cache and the budget cutoff all live i
 3. Open the database and find the **connection string**, not the REST credentials.
    In the connect panel, switch off the **REST** tab to the `redis-cli` / Python one.
 
-   It looks like `rediss://default:AbC123...@frank-man-145834.upstash.io:6379`.
+   It looks like `rediss://default:AbC123...@us1-example-12345.upstash.io:6379`.
 
    - If the password shows as `********`, click the reveal/eye icon **before**
      copying, or you'll copy literal asterisks.
@@ -335,7 +335,7 @@ before deploying.
 ## 6. Deploy (~5 minutes)
 
 ```powershell
-gcloud run deploy analytics-agent --image $IMAGE --region us-west1 --allow-unauthenticated --min-instances 0 --max-instances 3 --memory 512Mi --cpu 1 --concurrency 4 --timeout 120 --set-env-vars "DEPLOY_MODE=deployed,ANALYST_MODEL=claude-haiku-4-5,MAX_AGENT_ITERS=6,DEMO_ENABLED=true,RATE_LIMIT_PER_VISITOR_PER_DAY=5,GLOBAL_DAILY_QUESTION_CAP=300,MONTHLY_BUDGET_USD=15,CORS_ALLOWED_ORIGIN=https://portfolio-liart-rho-94.vercel.app" --set-secrets "ANTHROPIC_API_KEY=anthropic-api-key:latest,REDIS_URL=redis-url:latest"
+gcloud run deploy analytics-agent --image $IMAGE --region us-west1 --allow-unauthenticated --min-instances 0 --max-instances 3 --memory 512Mi --cpu 1 --concurrency 4 --timeout 120 --set-env-vars "DEPLOY_MODE=deployed,ANALYST_MODEL=claude-haiku-4-5,MAX_AGENT_ITERS=6,DEMO_ENABLED=true,RATE_LIMIT_PER_VISITOR_PER_DAY=5,GLOBAL_DAILY_QUESTION_CAP=300,MONTHLY_BUDGET_USD=15,CORS_ALLOWED_ORIGIN=https://carlos-rubio-marroquin.com" --set-secrets "ANTHROPIC_API_KEY=anthropic-api-key:latest,REDIS_URL=redis-url:latest"
 ```
 
 What the flags buy you:
@@ -548,7 +548,7 @@ the step 1a check against the exact string you stored.
 
 **Browser console says CORS blocked** — the origin on Cloud Run doesn't exactly match
 the site. It's an exact string compare: scheme, host, no trailing slash.
-`https://portfolio-liart-rho-94.vercel.app` — not `http://`, not `.../`.
+`https://carlos-rubio-marroquin.com` — not `http://`, not `www.`, not `.../`.
 
 **The demo answers nothing and the network tab shows `{"disabled": true}`** — either
 `DEMO_ENABLED=false` or the monthly budget tripped. Check the `budget:<YYYY-MM>` key

@@ -68,7 +68,7 @@ strangers: the rate limiter, the response cache and the budget cutoff all live i
 3. Open the database and find the **connection string**, not the REST credentials.
    In the connect panel, switch off the **REST** tab to the `redis-cli` / Python one.
 
-   It looks like `rediss://default:AbC123...@frank-man-145834.upstash.io:6379`.
+   It looks like `rediss://default:AbC123...@us1-example-12345.upstash.io:6379`.
 
    - If the password shows as `********`, click the reveal/eye icon **before**
      copying, or you'll copy literal asterisks.

@@ -30,6 +30,37 @@ def test_run_sql_rejects_non_select(sql, loaded_db):
     assert "rows" not in out
 
 
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # Table-valued pragma functions run PRAGMA functionality without the
+        # literal keyword PRAGMA, so sqlparse tokenizes them as an ordinary
+        # function-name identifier -- the Keyword-ttype check above never
+        # sees them. Security review, 2026-09-30: this sailed through as
+        # allowed before the pragma_ prefix check was added.
+        "SELECT pragma_table_info('buildings')",
+        "SELECT * FROM pragma_table_info('buildings')",
+        "select * from PRAGMA_table_info('buildings')",  # case
+        "SELECT * FROM pragma_database_list()",
+        "SELECT * FROM pragma_compile_options()",
+    ],
+)
+def test_run_sql_rejects_pragma_table_valued_functions(sql, loaded_db):
+    out = tools.run_sql(sql)
+    assert out["error_type"] == "GuardrailError"
+    assert "rows" not in out
+
+
+def test_run_sql_allows_a_string_literal_that_merely_contains_pragma(loaded_db):
+    """The pragma_ check above must match identifiers, not substrings inside
+    quoted values -- a legitimate query can reference data that happens to
+    contain the word without tripping the guardrail."""
+    out = tools.run_sql(
+        "SELECT data_year FROM energy_records WHERE 'pragma_anything' = 'pragma_anything'"
+    )
+    assert "error_type" not in out
+
+
 def test_run_sql_allows_select_and_cte(loaded_db):
     rows = tools.run_sql("SELECT data_year, site_eui FROM energy_records ORDER BY data_year")
     assert rows["row_count"] == 5
@@ -75,6 +106,42 @@ def test_system_prompt_has_schema_and_cache_breakpoint():
     body = blocks[0]["text"]
     assert "energy_records" in body and "primary_property_type" in body
     assert "Compliant" in body  # enum surfaced
+
+
+# --- catalog: source_key must not reach the filesystem unvalidated -------- #
+# Security review, 2026-09-30: agent/catalog.py joined source_key straight
+# into a path with no check. `source="../deploy/cloudrun"` on the public
+# POST /ask endpoint read deploy/cloudrun.yaml off disk -- proved against
+# this exact repo before the fix. Two real, independently-reachable call
+# sites: build_system_prompt (the HTTP `source` field) and describe_schema
+# (a tool the agent itself calls, with an unconstrained dataset_key).
+@pytest.mark.parametrize(
+    "bad_source",
+    [
+        "../deploy/cloudrun",
+        "../../deploy/cloudrun",
+        "seattle_energy/../../deploy/cloudrun",
+        "",
+        "base",  # a real module in sources/, but not a registered SourceSpec
+    ],
+)
+def test_catalog_load_rejects_path_traversal(bad_source):
+    from agent import catalog
+
+    with pytest.raises(FileNotFoundError):
+        catalog.load(bad_source)
+
+
+def test_build_system_prompt_rejects_path_traversal():
+    with pytest.raises(FileNotFoundError):
+        prompts.build_system_prompt("../deploy/cloudrun")
+
+
+def test_describe_schema_tool_rejects_path_traversal(loaded_db):
+    payload, is_error = tools.run_tool("describe_schema", {"dataset_key": "../deploy/cloudrun"})
+    assert is_error is True
+    data = json.loads(payload)
+    assert data["error_type"] == "FileNotFoundError"
 
 
 # --- M9: a second source drops in with no agent change --------------------- #

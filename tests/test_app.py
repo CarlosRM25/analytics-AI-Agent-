@@ -204,6 +204,34 @@ def test_rate_limit_kicks_in_after_the_cap(looping_agent, fake_redis, monkeypatc
     assert blocked.get_json() == {"limited": True, "scope": "visitor"}
 
 
+def test_rate_limit_uses_the_last_forwarded_hop_not_the_spoofable_first(
+    looping_agent, fake_redis, monkeypatch
+):
+    """Cloud Run appends the real connecting peer as the LAST X-Forwarded-For
+    entry; every earlier entry is whatever the client itself sent and is as
+    spoofable as `curl -H "X-Forwarded-For: 1.2.3.4"`. Before this was fixed
+    (security review, 2026-09-30), the per-visitor cap used the first entry,
+    so varying only the first hop got a fresh identity on every request and
+    the cap never tripped. Same last hop here on every request, different
+    (attacker-controlled) first hop each time -- the cap must still bite."""
+    monkeypatch.setattr(api_mod.get_settings(), "RATE_LIMIT_PER_VISITOR_PER_DAY", 2)
+    c = api_mod.create_app().test_client()
+    real_peer = "9.9.9.9"
+
+    def ask(question, spoofed_first_hop):
+        return c.post(
+            "/ask",
+            json={"question": question},
+            headers={"X-Forwarded-For": f"{spoofed_first_hop}, {real_peer}"},
+        )
+
+    assert ask("q one", "1.1.1.1").status_code == 200
+    assert ask("q two", "2.2.2.2").status_code == 200
+    blocked = ask("q three", "3.3.3.3")
+    assert blocked.status_code == 429
+    assert blocked.get_json() == {"limited": True, "scope": "visitor"}
+
+
 def test_cache_hits_do_not_consume_rate_limit(looping_agent, fake_redis, monkeypatch):
     monkeypatch.setattr(api_mod.get_settings(), "RATE_LIMIT_PER_VISITOR_PER_DAY", 1)
     c = api_mod.create_app().test_client()

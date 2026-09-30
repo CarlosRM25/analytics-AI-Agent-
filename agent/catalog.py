@@ -12,11 +12,30 @@ from pathlib import Path
 
 import yaml
 
+from sources import base as sources_base
+
 _ROOT = Path(__file__).resolve().parents[1]
 
 
 @lru_cache
 def load(source_key: str) -> dict:
+    # source_key reaches here from two directions with no validation upstream:
+    # the public /ask endpoint's `source` field, and the agent's own
+    # describe_schema(dataset_key) tool call. An unchecked
+    # {_ROOT}/"catalog"/f"{source_key}.yaml" path join is a path-traversal
+    # vector -- `source_key="../deploy/cloudrun"` reads deploy/cloudrun.yaml
+    # straight off disk (security review, 2026-09-30, proved against this
+    # exact repo). sources_base.load() already does the "is this a real,
+    # registered source" check via a plain Python import, which can't be
+    # tricked into escaping a directory the way a raw path join can: a module
+    # name with a `/` or `..` in it just fails to import. Reusing it here
+    # means every current and future caller of catalog.load() is covered by
+    # one check instead of needing its own.
+    try:
+        sources_base.load(source_key)
+    except Exception as exc:  # noqa: BLE001 - any failure here means "not a real source"
+        raise FileNotFoundError(f"no catalog for source {source_key!r}") from exc
+
     path = _ROOT / "catalog" / f"{source_key}.yaml"
     if not path.exists():
         raise FileNotFoundError(f"no catalog for source {source_key!r} at {path}")

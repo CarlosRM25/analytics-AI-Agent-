@@ -201,6 +201,18 @@ def _validate_select(sql: str) -> None:
             raise GuardrailError(f"forbidden statement: {tok.value}")
         if tok.ttype in Keyword and val in _FORBIDDEN:
             raise GuardrailError(f"forbidden keyword: {tok.value}")
+        # SQLite also exposes PRAGMA functionality as callable table-valued
+        # functions -- `SELECT * FROM pragma_table_info('buildings')` runs
+        # without ever containing the literal keyword PRAGMA, so sqlparse
+        # tokenizes it as a plain function-name identifier and the check
+        # above never sees it (security review, 2026-09-30; verified this
+        # sails through as ALLOWED without this check). Read-only PRAGMA
+        # introspection can't touch the query_only connection setting or the
+        # OS-level read-only file handle -- those sit outside SQL text
+        # entirely -- so this closes a real gap in this one layer, not a way
+        # past the other two.
+        if val.startswith("PRAGMA_"):
+            raise GuardrailError(f"forbidden keyword: {tok.value}")
 
 
 def _statement_timeout(conn, ms: int) -> None:

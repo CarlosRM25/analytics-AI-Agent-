@@ -55,8 +55,19 @@ def _steps_for_api(result) -> list[dict]:
 
 
 def _client_ip() -> str:
+    # The LAST entry is the one Cloud Run's own proxy appends after observing
+    # the real connecting peer. Every earlier entry -- including the first,
+    # which is what the previous version of this function trusted -- is
+    # whatever the client itself put in the header, so it's as spoofable as
+    # `curl -H "X-Forwarded-For: 1.2.3.4"`. Trusting it let one visitor get a
+    # fresh per-visitor rate-limit identity on every request, just by sending
+    # a different fake first hop each time (security review, 2026-09-30).
     fwd = request.headers.get("X-Forwarded-For", "")
-    return fwd.split(",")[0].strip() or request.remote_addr or "0.0.0.0"
+    if fwd:
+        last = fwd.split(",")[-1].strip()
+        if last:
+            return last
+    return request.remote_addr or "0.0.0.0"
 
 
 def _turnstile_ok(token: str, secret: str) -> bool:
